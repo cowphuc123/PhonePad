@@ -22,7 +22,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 STATIC = RES_DIR / "static"
 LAYOUTS = DATA_DIR / "layouts.json"
+SETTINGS = DATA_DIR / "settings.json"  # lựa chọn trên cửa sổ PhonePad (vd. cửa sổ để phát)
 FFMPEG_DIRS = [DATA_DIR / "ffmpeg", DATA_DIR / "tools" / "ffmpeg" / "bin"]
+FFMPEG9_DIRS = [DATA_DIR / "ffmpeg9", DATA_DIR / "tools" / "ffmpeg9" / "bin"]  # chụp riêng cửa sổ
 
 
 def ensure_layouts():

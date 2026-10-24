@@ -82,13 +82,17 @@ FLAG_IDR = 0x01
 DEFAULT_PIPELINES = ["nvenc", "qsv", "mf"]
 
 
-def ffmpeg_path():
-    """ffmpeg.exe đã tải (DATA_DIR/ffmpeg hoặc tools/ffmpeg/bin) hoặc trong PATH; None nếu không có."""
-    for d in paths.FFMPEG_DIRS:
+def ffmpeg_path(kind="screen"):
+    """ffmpeg.exe đã tải, None nếu chưa có.
+    "screen": ffmpeg 7.1 (ddagrab + NVENC chạy với driver NVIDIA cũ), DATA_DIR/ffmpeg hoặc trong PATH.
+    "window": ffmpeg 9 (gfxcapture = Windows.Graphics.Capture, chụp riêng một cửa sổ), DATA_DIR/ffmpeg9."""
+    for d in (paths.FFMPEG_DIRS if kind == "screen" else paths.FFMPEG9_DIRS):
         exe = d / "ffmpeg.exe"
         if exe.exists():
             return str(exe)
-    return shutil.which("ffmpeg")
+    if kind == "screen":  # thiếu 7.1 thì ffmpeg trong PATH, rồi ffmpeg 9 (ddagrab vẫn có, NVENC cần driver mới)
+        return shutil.which("ffmpeg") or ffmpeg_path("window")
+    return None
 
 
 def find_ffmpeg():
@@ -110,7 +114,19 @@ def _grab(crop, fps):
     # pts của ddagrab là giờ chụp (µs) nên dao động; quy về 1/fps thì có lúc hai khung trùng pts và
     # muxer vứt khung sau ("non monotonically increasing dts") -> mất khung tham chiếu, hình vỡ.
     # Đánh lại pts tuần tự (thời gian thật đi trong header gói UDP, không cần pts).
-    return s + ",setpts=N/FRAME_RATE/TB"
+    return s + f",setpts=N/{fps}/TB"
+
+
+def _gfx(window, width, height, fps):
+    """gfxcapture: chụp riêng một cửa sổ (kể cả khi bị cửa sổ khác che), thu nhỏ luôn trên GPU về
+    width x height giữ tỉ lệ. Cửa sổ chỉ gửi khung khi nội dung đổi; thu nhỏ xuống taskbar thì
+    Windows ngừng vẽ nó nên không có khung mới (điện thoại giữ hình cuối)."""
+    s = (f"gfxcapture=hwnd={int(window['hwnd'])}:max_framerate={fps}:width={width}:height={height}"
+         f":resize_mode=scale_aspect:capture_cursor=1")
+    for side, v in zip(("left", "top", "right", "bottom"), window.get("crop") or (0, 0, 0, 0)):
+        if v:
+            s += f":crop_{side}={int(v)}"
+    return s + f",setpts=N/{fps}/TB"
 
 
 def _rate(bitrate_kbps, fps, bufsize_frames=1):
@@ -147,10 +163,12 @@ def _sws_nv12(width, height):
 
 
 def build_cmd(pipeline, crop=None, width=1280, height=720, fps=60, bitrate_kbps=10000,
-              ffmpeg=None):
+              ffmpeg=None, window=None):
+    """window = {"hwnd": ..., "crop": (trái, trên, phải, dưới)} -> chỉ phát cửa sổ đó (cần ffmpeg 9);
+    các bước sau nguồn hình giống hệt (thu nhỏ về đúng cỡ đã có sẵn thì swscale/VPP chỉ đổi màu)."""
     ff = ffmpeg or find_ffmpeg()
     gop = str(int(fps * 2))
-    grab = _grab(crop, fps)
+    grab = _gfx(window, width, height, fps) if window else _grab(crop, fps)
     head = [ff, "-hide_banner", "-loglevel", "error", "-nostats"]
     # Màn hình laptop Optimus do Intel vẽ: ddagrab phải chạy trên GPU Intel (chạy trên NVIDIA báo
     # "Failed to enumerate DXGI output 0"), nên NVENC luôn cần một lần chép khung qua RAM.
@@ -348,10 +366,11 @@ class VideoStreamer:
     def __init__(self, send_fn, pipelines=None, ffmpeg=None, log=print):
         self.send_fn = send_fn
         self.pipelines = list(pipelines or DEFAULT_PIPELINES)
-        self.ffmpeg = ffmpeg or find_ffmpeg()
+        self.ffmpeg = ffmpeg      # None = tìm lúc chạy (ffmpeg có thể vừa được tải về)
         self.log = log
         self.on_frame = None      # tuỳ chọn: hàm(au, frame_number, capture_us, idr) để đo/gỡ lỗi
         self.pipeline = None      # đường nén đang chạy
+        self._good = {}           # chế độ ("screen"/"window") -> đường nén đã chạy được
         self.last_error = None
         self.frame_number = 0
         self.frames_sent = 0
@@ -376,13 +395,14 @@ class VideoStreamer:
     def proc(self):
         return self._proc
 
-    def start(self, addr, crop=None, width=1280, height=720, fps=60, bitrate_kbps=10000):
-        """Bắt đầu phát tới addr=(ip, port). crop=(x, y, w, h) theo pixel màn hình hoặc None."""
+    def start(self, addr, crop=None, width=1280, height=720, fps=60, bitrate_kbps=10000, window=None):
+        """Bắt đầu phát tới addr=(ip, port). crop=(x, y, w, h) theo pixel màn hình hoặc None.
+        window={"hwnd": ..., "crop": (trái, trên, phải, dưới)}: chỉ phát cửa sổ đó (ffmpeg 9)."""
         with self._lock:
             self._stop_locked()
             self.addr = addr
             self.params = dict(crop=crop, width=width, height=height, fps=fps,
-                               bitrate_kbps=bitrate_kbps)
+                               bitrate_kbps=bitrate_kbps, window=window)
             self._stop_evt = threading.Event()
             self._thread = threading.Thread(target=self._run, args=(self._stop_evt,),
                                             name="VideoStreamer", daemon=True)
@@ -395,7 +415,7 @@ class VideoStreamer:
             raise RuntimeError("Chưa start()")
         params = dict(self.params)
         addr = changes.pop("addr", self.addr)
-        bad = set(changes) - {"crop", "width", "height", "fps", "bitrate_kbps"}
+        bad = set(changes) - {"crop", "width", "height", "fps", "bitrate_kbps", "window"}
         if bad:
             raise TypeError(f"Tham số không hợp lệ: {', '.join(sorted(bad))}")
         params.update(changes)
@@ -454,7 +474,8 @@ class VideoStreamer:
                 pass
 
     def _spawn(self, pipeline):
-        cmd = build_cmd(pipeline, ffmpeg=self.ffmpeg, **self.params)
+        ff = self.ffmpeg or ffmpeg_path("window" if self.params.get("window") else "screen") or "ffmpeg"
+        cmd = build_cmd(pipeline, ffmpeg=ff, **self.params)
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, bufsize=0, creationflags=flags)
@@ -468,9 +489,11 @@ class VideoStreamer:
 
     def _run(self, stop_evt):
         order = list(self.pipelines)
-        if self.pipeline in order:  # đường đã chạy được lần trước lên đầu
-            order.remove(self.pipeline)
-            order.insert(0, self.pipeline)
+        mode = "window" if self.params.get("window") else "screen"
+        good = self._good.get(mode)  # đường đã chạy được lần trước (riêng từng chế độ) lên đầu
+        if good in order:
+            order.remove(good)
+            order.insert(0, good)
         idx = 0
         last_logged = None
         while not stop_evt.is_set():
@@ -538,6 +561,7 @@ class VideoStreamer:
                     if not got:
                         got = True
                         self.pipeline = pipeline
+                        self._good["window" if self.params.get("window") else "screen"] = pipeline
                         self.last_error = None
                         self._log(f"[video] đang phát bằng {pipeline} "
                                  f"(khung đầu sau {time.monotonic() - t0:.2f} s)")

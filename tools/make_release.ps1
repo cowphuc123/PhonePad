@@ -52,7 +52,7 @@ try {
         --add-data "$root\static\index.html;static" `
         --add-data "$default;." `
         --add-data "$root\phonepad.ico;." `
-        --collect-all vgamepad @exclude `
+        --collect-all vgamepad --hidden-import winlist @exclude `
         --distpath "$build\dist" --workpath "$build\pyi" --specpath $build `
         server.py
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller that bai" }

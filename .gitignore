@@ -27,3 +27,5 @@ android/.idea/
 # PyInstaller (tools/make_release.ps1) và ffmpeg tải bằng cửa sổ PhonePad khi chạy từ mã nguồn
 build/
 ffmpeg/
+ffmpeg9/
+settings.json

@@ -59,7 +59,14 @@ Mỗi điện thoại kết nối = 1 tay cầm riêng → chơi được nhiề
 ## Xem hình máy tính trên điện thoại
 
 Trong app bấm **📺** để bật/tắt **hình máy tính** làm nền phía sau các nút (người chơi 2 không cần nhìn màn hình máy tính).
-- Lần đầu: trên cửa sổ PhonePad bấm **Tải ffmpeg (~170 MB)** (chỉ một lần).
+- Lần đầu: trên cửa sổ PhonePad bấm **Tải ffmpeg** (chỉ một lần).
+- **Chỉ phát một app:** ở ô **Phát lên điện thoại** trên cửa sổ PhonePad chọn cửa sổ của app/game thay vì *Toàn màn hình*.
+  Điện thoại chỉ thấy đúng cửa sổ đó, kể cả khi nó bị cửa sổ khác che hay bạn đang dùng app khác (Alt+Tab).
+  Thu nhỏ hẳn cửa sổ xuống thanh tác vụ thì Windows ngừng vẽ nó: điện thoại giữ hình cuối, mở lên là chạy tiếp.
+  Game tắt rồi mở lại vẫn tự nhận ra (theo tên chương trình); lựa chọn được nhớ cho lần sau.
+  Chế độ này cần bản ffmpeg khác (nút **Tải ffmpeg** hiện lại, ~115 MB) và chạy tốt nhất với game ở chế độ
+  cửa sổ / không viền (*windowed / borderless*), vì game toàn màn hình thật thường tự thu nhỏ khi Alt+Tab.
+  Card NVIDIA cần driver 610 trở lên để nén bằng NVENC; driver cũ hơn thì tự dùng Intel Quick Sync.
 - Máy tính chụp màn hình và nén bằng card NVIDIA (NVENC), không có thì Intel Quick Sync; gửi UDP; điện thoại giải mã phần cứng.
   Đo trên máy thử: nén ~23 ms, 60 fps. Thanh trên app hiện fps và độ trễ hình ước tính.
 - Game chia đôi màn hình: trong **✎ Sửa → ⚙ Hồ sơ → Hình máy tính** chọn *Nửa trái/phải/trên/dưới*

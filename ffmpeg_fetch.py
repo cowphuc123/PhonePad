@@ -1,8 +1,10 @@
 """Tải ffmpeg.exe cho tính năng xem hình máy tính (dùng trong cửa sổ PhonePad, không cần PowerShell).
 
-Ghim bản gyan 7.1 "full_build" giống tools/fetch_ffmpeg.ps1: bản mới nhất còn dùng NVENC API 12.2
-(driver NVIDIA >= 551.76), có ddagrab, h264_nvenc, h264_qsv, h264_mf.
-Chỉ giữ lại bin/ffmpeg.exe và LICENSE (GPL) trong DATA_DIR/ffmpeg.
+Hai bản, đều của gyan (GitHub GyanD/codexffmpeg), chỉ giữ lại bin/ffmpeg.exe và LICENSE (GPL):
+  "screen": 7.1 full_build -> DATA_DIR/ffmpeg. Phát cả màn hình (ddagrab). Bản mới nhất còn dùng
+            NVENC API 12.2 (driver NVIDIA >= 551.76), giống tools/fetch_ffmpeg.ps1.
+  "window": 9.0.2 essentials -> DATA_DIR/ffmpeg9. Chỉ phát một cửa sổ (gfxcapture, có từ ffmpeg 8);
+            NVENC của bản này cần driver >= 610, driver cũ hơn thì tự dùng Quick Sync / Media Foundation.
 """
 import shutil
 import tempfile
@@ -12,15 +14,24 @@ from pathlib import Path
 
 import paths
 
-VERSION = "7.1"
-URL = (f"https://github.com/GyanD/codexffmpeg/releases/download/{VERSION}/"
-       f"ffmpeg-{VERSION}-full_build.zip")
+KINDS = {
+    "screen": ("7.1", "https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-full_build.zip",
+               "ffmpeg", 177),
+    "window": ("9.0.2", "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/"
+                        "ffmpeg-9.0.2-essentials_build.zip", "ffmpeg9", 115),
+}
+VERSION, URL = KINDS["screen"][:2]
 
 
-def fetch(progress=None, url=URL):
+def size_mb(kind):
+    return KINDS[kind][3]
+
+
+def fetch(progress=None, kind="screen"):
     """Tải và giải nén. progress(done_bytes, total_bytes) được gọi trong lúc tải.
     Trả về đường dẫn ffmpeg.exe; lỗi thì ném exception."""
-    dest = paths.DATA_DIR / "ffmpeg"
+    _, url, folder, _ = KINDS[kind]
+    dest = paths.DATA_DIR / folder
     with tempfile.TemporaryDirectory(prefix="phonepad_ffmpeg_") as tmp:
         arc = Path(tmp) / "ffmpeg.zip"
         req = urllib.request.Request(url, headers={"User-Agent": "PhonePad"})

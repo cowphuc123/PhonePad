@@ -4,6 +4,7 @@ Thread chính chạy Tk; máy chủ (aiohttp + UDP) chạy trong ServerThread. M
 trình được chuyển vào ô nhật ký của cửa sổ (bản exe không có console).
 """
 import ctypes
+import json
 import os
 import queue
 import sys
@@ -19,6 +20,7 @@ import ffmpeg_fetch
 import paths
 import server
 import updater
+import winlist
 from session import PAD_LIB
 from version import VERSION
 
@@ -92,14 +94,25 @@ class StatusWindow:
         vf.grid(row=5, column=1, sticky="w")
         self.video_lbl = tk.Label(vf, font=("Segoe UI", 10))
         self.video_lbl.pack(side="left")
-        self.ff_btn = ttk.Button(vf, text="Tải ffmpeg (~170 MB)", command=self.download_ffmpeg)
+        self.ff_btn = ttk.Button(vf, command=self.download_ffmpeg)
         self.ff_bar = ttk.Progressbar(root, length=300, mode="determinate")
 
-        tk.Label(root, text="Nhật ký", font=("Segoe UI", 9), fg=GREY).grid(row=7, column=0, pady=(8, 0), **pad)
+        # chọn phát cả màn hình hay chỉ một cửa sổ (kể cả khi cửa sổ đó bị che / không ở trên cùng)
+        tk.Label(root, text="Phát lên điện thoại:", font=("Segoe UI", 10, "bold")).grid(row=6, column=0, **pad)
+        sf = tk.Frame(root)
+        sf.grid(row=6, column=1, sticky="we", padx=(0, 14))
+        self.src = ttk.Combobox(sf, state="readonly", width=42, postcommand=self.refresh_windows)
+        self.src.pack(side="left", fill="x", expand=True)
+        self.src.bind("<<ComboboxSelected>>", self.on_source)
+        self.win_items = []  # song song với các mục sau "Toàn màn hình": (hwnd, title, exe)
+        self.src_lbl = tk.Label(root, font=("Segoe UI", 9), fg=GREY, justify="left", wraplength=300)
+        self.src_lbl.grid(row=7, column=1, sticky="w")
+
+        tk.Label(root, text="Nhật ký", font=("Segoe UI", 9), fg=GREY).grid(row=9, column=0, pady=(8, 0), **pad)
         self.log = ScrolledText(root, height=10, font=("Consolas", 9), state="disabled", wrap="word")
-        self.log.grid(row=8, column=0, columnspan=2, padx=14, pady=(0, 6), sticky="nsew")
+        self.log.grid(row=10, column=0, columnspan=2, padx=14, pady=(0, 6), sticky="nsew")
         bf = tk.Frame(root)
-        bf.grid(row=9, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="we")
+        bf.grid(row=11, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="we")
         ttk.Button(bf, text="Mở thư mục dữ liệu",
                    command=lambda: os.startfile(paths.DATA_DIR)).pack(side="left")
         ttk.Button(bf, text="Tắt PhonePad", command=self.quit).pack(side="right")
@@ -109,7 +122,7 @@ class StatusWindow:
         self.update_info = None
         self.updating = False
         root.columnconfigure(1, weight=1)
-        root.rowconfigure(8, weight=1)
+        root.rowconfigure(10, weight=1)
         root.protocol("WM_DELETE_WINDOW", self.quit)
 
         sys.stdout = _LogWriter(self.q, sys.__stdout__)
@@ -118,6 +131,7 @@ class StatusWindow:
         print("Dữ liệu (bố cục, ffmpeg): %s" % paths.DATA_DIR)
         if getattr(args, "after_update", False):
             print("Đã cập nhật lên bản %s" % VERSION)
+        self.load_source()
         self.tick()
         root.after(2000, self.check_update)
 
@@ -165,7 +179,8 @@ class StatusWindow:
         self.phones.configure(text="\n".join(names) if names else "chưa có điện thoại nào",
                               fg="black" if names else GREY)
         vc = self.srv.app["video"]
-        if vc is not None and vc.ffmpeg_ok():
+        kind = "window" if vc is not None and vc.target else "screen"
+        if vc is not None and vc.ffmpeg_ok(kind):
             self.ff_btn.pack_forget()
             ip, pipe = vc.watching
             if ip:
@@ -176,8 +191,70 @@ class StatusWindow:
             self.video_lbl.configure(text="cần ffmpeg " if not self.downloading else "đang tải ffmpeg... ",
                                      fg=RED if not self.downloading else GREY)
             if not self.downloading:
+                self.ff_btn.configure(text="Tải ffmpeg (~%d MB)" % ffmpeg_fetch.size_mb(kind))
                 self.ff_btn.pack(side="left")
+        if vc is not None and vc.target:
+            vc.window_target()  # cập nhật trạng thái cửa sổ (tìm lại nếu game vừa mở lại)
+            note = {
+                "ok": "Chỉ cửa sổ này, kể cả khi bị che hay đang dùng app khác.",
+                "minimized": "Cửa sổ đang thu nhỏ: điện thoại giữ hình cuối, mở cửa sổ lên là chạy tiếp.",
+                "closed": "Cửa sổ đã đóng: chờ app mở lại (tự nhận ra).",
+            }.get(vc.target_state, "")
+            self.src_lbl.configure(text=note, fg=RED if vc.target_state == "closed" else GREY)
+        else:
+            self.src_lbl.configure(text="")
         self.root.after(300, self.tick)
+
+    # --- chọn nguồn hình ---
+
+    def _label(self, title, exe):
+        t = title if len(title) <= 40 else title[:39] + "…"
+        return "%s  —  %s" % (t, exe) if exe else t
+
+    def refresh_windows(self):
+        self.win_items = winlist.list_windows()
+        self.src.configure(values=["Toàn màn hình"] + [self._label(t, e) for _, t, e in self.win_items])
+
+    def on_source(self, _event=None):
+        i = self.src.current()
+        vc = self.srv.app["video"]
+        if i <= 0 or i > len(self.win_items):
+            target = None
+            print("Phát: toàn màn hình")
+        else:
+            hwnd, title, exe = self.win_items[i - 1]
+            target = {"hwnd": hwnd, "title": title, "exe": exe}
+            print('Phát: chỉ cửa sổ "%s" (%s)' % (title, exe))
+        if vc is not None:
+            vc.target = target  # lần 'W' kế tiếp của điện thoại sẽ khởi động lại ffmpeg theo nguồn mới
+        self.save_source(target)
+
+    def load_source(self):
+        """Lần trước chọn cửa sổ nào thì tìm lại theo tên tiến trình (hwnd đổi mỗi lần mở app)."""
+        try:
+            saved = json.loads(paths.SETTINGS.read_text(encoding="utf-8")).get("window")
+        except (OSError, ValueError):
+            saved = None
+        vc = self.srv.app["video"]
+        if not saved or vc is None:
+            self.src.set("Toàn màn hình")
+            return
+        found = winlist.find(saved.get("exe", ""), saved.get("title", ""))
+        hwnd, title = (found[0], found[1]) if found else (0, saved.get("title", ""))
+        vc.target = {"hwnd": hwnd, "title": title, "exe": saved.get("exe", "")}
+        self.src.set(self._label(title, saved.get("exe", "")))
+        print('Phát: chỉ cửa sổ "%s"%s' % (title, "" if found else " (chưa mở)"))
+
+    def save_source(self, target):
+        try:
+            data = json.loads(paths.SETTINGS.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        data["window"] = {"exe": target["exe"], "title": target["title"]} if target else None
+        try:
+            paths.SETTINGS.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError as e:
+            print("Không lưu được lựa chọn: %s" % e)
 
     # --- hành động ---
 
@@ -186,13 +263,16 @@ class StatusWindow:
             return
         self.downloading = True
         self.ff_btn.pack_forget()
-        self.ff_bar.grid(row=6, column=1, sticky="w", pady=(2, 0))
-        print("Đang tải ffmpeg %s từ %s" % (ffmpeg_fetch.VERSION, ffmpeg_fetch.URL))
+        self.ff_bar.grid(row=8, column=1, sticky="w", pady=(2, 0))
+        vc = self.srv.app["video"]
+        kind = "window" if vc is not None and vc.target else "screen"
+        version, url = ffmpeg_fetch.KINDS[kind][:2]
+        print("Đang tải ffmpeg %s từ %s" % (version, url))
 
         def work():
             err = None
             try:
-                exe = ffmpeg_fetch.fetch(lambda d, t: self.q.put(("progress", (d, t))))
+                exe = ffmpeg_fetch.fetch(lambda d, t: self.q.put(("progress", (d, t))), kind=kind)
                 print("Đã tải ffmpeg: %s" % exe)
             except Exception as e:
                 err = str(e)
