@@ -16,6 +16,11 @@ if (-not $Version) {
     $Version = $m.Matches[0].Groups[1].Value
 }
 Write-Host "Phien ban $Version"
+# exe tự cập nhật so tag GitHub với version.py, app so với versionName: hai số phải trùng nhau
+$py = Select-String -Path (Join-Path $root "version.py") -Pattern 'VERSION\s*=\s*"([^"]+)"'
+if ($py.Matches[0].Groups[1].Value -ne $Version) {
+    throw "version.py ($($py.Matches[0].Groups[1].Value)) khac versionName Android ($Version)"
+}
 
 # --- APK ---
 $apkOut = Join-Path $root "android\app\build\outputs\apk\debug\app-debug.apk"

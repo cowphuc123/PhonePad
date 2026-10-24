@@ -22,6 +22,16 @@ Vào trang **[Releases](https://github.com/cowphuc123/PhonePad/releases/latest)*
 
 Máy tính **chỉ nhận kết nối từ app PhonePad**; mở địa chỉ máy tính bằng trình duyệt sẽ bị từ chối.
 
+## Cập nhật
+
+Cả hai bản tự kiểm tra trang Releases trên GitHub (từ bản 0.3):
+- **Máy tính:** có bản mới thì cửa sổ PhonePad hiện nút **⬆ Cập nhật lên v…** (góc dưới). Bấm → tải exe mới,
+  kiểm tra mã SHA‑256, tự thay file exe đang dùng và mở lại. Bố cục, ffmpeg giữ nguyên.
+- **Điện thoại:** màn hình đầu của app hiện nút **⬆ Cập nhật lên bản …**. Bấm → tải APK, Android hỏi xác nhận cài.
+  Lần đầu Android yêu cầu bật *Cho phép từ nguồn này* cho PhonePad.
+- Nên cập nhật cả hai cùng lúc (máy tính và app cùng số phiên bản).
+- Bản 0.2 trở về trước chưa có nút này: tải tay bản mới ở trang Releases một lần.
+
 ## Hai kiểu điều khiển
 
 | Hồ sơ mẫu | Máy tính nhận được |

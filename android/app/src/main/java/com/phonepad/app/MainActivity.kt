@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -18,6 +19,9 @@ class MainActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var status: TextView
     private lateinit var ipEdit: EditText
+    private lateinit var update: TextView
+    private var updateInfo: Updater.Info? = null
+    @Volatile private var updating = false
     private val prefs by lazy { getSharedPreferences("pp", MODE_PRIVATE) }
     @Volatile private var scanning = false
     private var autoTried = false
@@ -32,6 +36,8 @@ class MainActivity : Activity() {
         col.addView(TextView(this).apply {
             text = "PhonePad"; textSize = 26f; setTextColor(Color.WHITE); paint.isFakeBoldText = true
         })
+        update = pill("", primary = true) { startUpdate() }.apply { visibility = View.GONE }
+        col.addView(update, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
         status = TextView(this).apply { textSize = 14f; setTextColor(MUTED); text = "Đang tìm máy tính trong mạng…" }
         col.addView(status, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4); bottomMargin = dp(12) })
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -58,8 +64,48 @@ class MainActivity : Activity() {
                 "• Điện thoại và máy tính dùng chung Wi-Fi, hoặc bật Chia sẻ Internet qua USB (trễ thấp nhất).\n" +
                 "• Không tìm thấy? Kiểm tra tường lửa Windows đã cho phép PhonePad, rồi nhập IP hiện trên cửa sổ PhonePad."
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        col.addView(TextView(this).apply {
+            textSize = 12f; setTextColor(MUTED); text = "Phiên bản ${BuildConfig.VERSION_NAME}"
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
         setContentView(ScrollView(this).apply { addView(col); setBackgroundColor(BG) })
+        checkUpdate()
+    }
+
+    // --- tự cập nhật (Updater.kt) ---
+
+    private fun checkUpdate() {
+        Thread {
+            val info = try { Updater.check() } catch (_: Exception) { null }  // không mạng: im lặng
+            if (info != null) runOnUiThread {
+                updateInfo = info
+                update.text = "⬆  Cập nhật lên bản ${info.version}"
+                update.visibility = View.VISIBLE
+            }
+        }.start()
+    }
+
+    private fun startUpdate() {
+        val info = updateInfo ?: return
+        if (updating || !Updater.ensureInstallAllowed(this)) return
+        updating = true
+        Thread {
+            try {
+                val apk = Updater.download(this, info) { done, total ->
+                    val pct = if (total > 0) done * 100 / total else 0
+                    runOnUiThread { update.text = "Đang tải bản ${info.version}… $pct%" }
+                }
+                runOnUiThread { update.text = "Đang cài bản ${info.version}…" }
+                Updater.install(this, apk)
+            } catch (e: Exception) {
+                runOnUiThread {
+                    update.text = "⬆  Cập nhật lên bản ${info.version}"
+                    Toast.makeText(this, "Cập nhật lỗi: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                updating = false
+            }
+        }.start()
     }
 
     override fun onResume() {

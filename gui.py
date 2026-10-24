@@ -8,6 +8,7 @@ import os
 import queue
 import sys
 import threading
+import time
 import tkinter as tk
 import webbrowser
 from pathlib import Path
@@ -17,7 +18,9 @@ from tkinter.scrolledtext import ScrolledText
 import ffmpeg_fetch
 import paths
 import server
+import updater
 from session import PAD_LIB
+from version import VERSION
 
 VIGEM_URL = "https://github.com/nefarius/ViGEmBus/releases/latest"
 GREEN, RED, GREY = "#1a7f37", "#c62828", "#666"
@@ -100,6 +103,11 @@ class StatusWindow:
         ttk.Button(bf, text="Mở thư mục dữ liệu",
                    command=lambda: os.startfile(paths.DATA_DIR)).pack(side="left")
         ttk.Button(bf, text="Tắt PhonePad", command=self.quit).pack(side="right")
+        self.upd_btn = ttk.Button(bf, command=self.start_update)  # hiện khi có bản mới
+        self.ver_lbl = tk.Label(bf, text="v" + VERSION, fg=GREY, font=("Segoe UI", 9))
+        self.ver_lbl.pack(side="right", padx=8)
+        self.update_info = None
+        self.updating = False
         root.columnconfigure(1, weight=1)
         root.rowconfigure(8, weight=1)
         root.protocol("WM_DELETE_WINDOW", self.quit)
@@ -108,7 +116,10 @@ class StatusWindow:
         sys.stderr = _LogWriter(self.q, sys.__stderr__)
         server.print_banner(args)
         print("Dữ liệu (bố cục, ffmpeg): %s" % paths.DATA_DIR)
+        if getattr(args, "after_update", False):
+            print("Đã cập nhật lên bản %s" % VERSION)
         self.tick()
+        root.after(2000, self.check_update)
 
     # --- cập nhật định kỳ ---
 
@@ -126,6 +137,22 @@ class StatusWindow:
                 elif kind == "progress":
                     done, total = val
                     self.ff_bar.configure(maximum=max(total, 1), value=done)
+                elif kind == "update_found":
+                    self.update_info = val
+                    self.upd_btn.configure(text="⬆ Cập nhật lên v%s" % val.version)
+                    self.upd_btn.pack(side="right")
+                elif kind == "update_progress":
+                    done, total = val
+                    self.upd_btn.configure(text="Đang tải %d%%" % (done * 100 // max(total, 1)))
+                elif kind == "update_failed":
+                    self.updating = False
+                    self.upd_btn.configure(text="⬆ Cập nhật lên v%s" % self.update_info.version)
+                    messagebox.showerror("PhonePad", "Cập nhật không được:\n%s\n\nCó thể tải tay tại:\n%s"
+                                         % (val, self.update_info.page))
+                elif kind == "update_ready":
+                    print("Mở bản mới...")
+                    self.quit(relaunch=val)
+                    return
                 elif kind == "ffmpeg_done":
                     self.downloading = False
                     self.ff_bar.grid_forget()
@@ -188,10 +215,56 @@ class StatusWindow:
         messagebox.showinfo("PhonePad", "Cài xong driver ViGEmBus thì tắt PhonePad và mở lại "
                                         "để dùng tay cầm Xbox ảo.")
 
-    def quit(self):
+    def check_update(self):
+        """Hỏi GitHub có bản mới không (lúc mở và mỗi 6 giờ); lỗi mạng thì im lặng."""
+        def work():
+            try:
+                info = updater.check()
+            except Exception as e:
+                print("Không kiểm tra được bản cập nhật: %s" % e)
+                return
+            if info is not None:
+                print("Có bản mới: v%s" % info.version)
+                self.q.put(("update_found", info))
+        if self.update_info is None:
+            threading.Thread(target=work, daemon=True).start()
+        self.root.after(6 * 3600 * 1000, self.check_update)
+
+    def start_update(self):
+        info = self.update_info
+        if info is None or self.updating:
+            return
+        if not updater.can_self_update():  # chạy từ mã nguồn: chỉ mở trang tải
+            webbrowser.open(info.page)
+            return
+        if not messagebox.askyesno("PhonePad", "Tải bản v%s (%.1f MB), PhonePad sẽ tự tắt và mở lại.\n"
+                                   "Nhớ cập nhật cả app trên điện thoại.\n\nCập nhật ngay?"
+                                   % (info.version, info.size / 1e6)):
+            return
+        self.updating = True
+        print("Đang tải bản v%s: %s" % (info.version, info.url))
+
+        def work():
+            try:
+                exe = updater.apply(info, lambda d, t: self.q.put(("update_progress", (d, t))))
+            except Exception as e:
+                print("Cập nhật lỗi: %s" % e)
+                self.q.put(("update_failed", str(e)))
+                return
+            self.q.put(("update_ready", exe))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def quit(self, relaunch=None):
         print("Đang tắt...")
         self.root.update()
-        self.srv.stop()
+        self.srv.stop()  # nhả cổng 8765/8766 trước khi bản mới mở
+        if relaunch is not None:
+            try:
+                updater.relaunch(relaunch)
+            except OSError as e:
+                messagebox.showerror("PhonePad", "Đã cập nhật nhưng không tự mở lại được (%s).\n"
+                                                 "Hãy mở lại PhonePad." % e)
         self.root.destroy()
 
 
@@ -219,8 +292,16 @@ def run(args):
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
         pass
+    updater.cleanup()
     srv = server.ServerThread(args.port, args.udp_port)
     err = srv.start()
+    # vừa tự cập nhật: bản cũ có thể chưa thoát hẳn, chờ nó nhả cổng
+    for _ in range(20 if getattr(args, "after_update", False) else 0):
+        if not err:
+            break
+        time.sleep(0.5)
+        srv = server.ServerThread(args.port, args.udp_port)
+        err = srv.start()
     root = tk.Tk()
     if err:
         root.withdraw()

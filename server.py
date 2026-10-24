@@ -152,6 +152,12 @@ class ServerThread:
         if self.error is None:
             self.loop.run_forever()
         self.loop.run_until_complete(self._cleanup())
+        # tác vụ nền (dọn điện thoại mất kết nối, theo dõi video) chạy vô hạn: huỷ trước khi đóng loop
+        tasks = asyncio.all_tasks(self.loop)
+        for t in tasks:
+            t.cancel()
+        if tasks:
+            self.loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
         self.loop.close()
 
     async def _start(self):
@@ -184,6 +190,7 @@ def main():
     ap.add_argument("--port", type=int, default=8765, help="cổng HTTP (bố cục, trình sửa trong app)")
     ap.add_argument("--udp-port", type=int, default=8766, help="cổng UDP cho app Android")
     ap.add_argument("--console", action="store_true", help="không mở cửa sổ, chỉ in ra console")
+    ap.add_argument("--after-update", action="store_true", help=argparse.SUPPRESS)  # do updater.relaunch truyền
     args = ap.parse_args()
 
     if sys.stdout is not None and hasattr(sys.stdout, "reconfigure"):
