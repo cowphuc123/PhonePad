@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111318">
+<title>PhonePad</title>
+<style>
+:root{
+  --bg:#111318; --fg:#e8eaf0; --mut:#8a90a0; --line:rgba(255,255,255,.28); --fill:rgba(255,255,255,.07);
+  --on:#3d8bff; --on-bg:rgba(61,139,255,.38); --panel:#1b1e26; --panel2:#252935; --danger:#ff5c5c; --ok:#3ddc84; --warn:#ffb020;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+button,select,input{font:inherit;color:inherit}
+#stage{position:fixed;inset:0}
+
+/* ---- điều khiển ---- */
+.c{position:absolute;transform:translate(-50%,-50%);touch-action:none}
+.btn{width:var(--s);height:var(--s);display:flex;align-items:center;justify-content:center;border:2px solid var(--line);
+  background:var(--fill);border-radius:50%;font-weight:700;font-size:calc(var(--s)*.3);text-align:center;line-height:1;overflow:hidden;padding:2px}
+.btn.square{border-radius:18%}
+.btn.wide{width:calc(var(--s)*1.7);height:calc(var(--s)*.72);border-radius:calc(var(--s)*.2);font-size:calc(var(--s)*.24)}
+.btn.small-t{font-size:calc(var(--s)*.2)}
+.btn.on{background:var(--on-bg);border-color:var(--on)}
+.stick{width:var(--s);height:var(--s);border-radius:50%;border:2px solid var(--line);background:var(--fill)}
+.stick .knob{position:absolute;left:50%;top:50%;width:42%;height:42%;margin:-21% 0 0 -21%;border-radius:50%;
+  background:rgba(255,255,255,.22);border:2px solid rgba(255,255,255,.4);pointer-events:none}
+.stick.on .knob{background:var(--on-bg);border-color:var(--on)}
+.dl{position:absolute;font-weight:700;font-size:calc(var(--s)*.11);color:var(--mut);pointer-events:none;transform:translate(-50%,-50%);white-space:nowrap}
+.dl.on{color:var(--on)}
+.dl.u{left:50%;top:11%}.dl.d{left:50%;top:89%}.dl.l{left:11%;top:50%}.dl.r{left:89%;top:50%}
+.dpad{width:var(--s);height:var(--s)}
+.dpad .arm{position:absolute;width:34%;height:34%;border:2px solid var(--line);background:var(--fill);display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:calc(var(--s)*.11);border-radius:16%;pointer-events:none}
+.dpad .arm.u{left:33%;top:0}.dpad .arm.d{left:33%;bottom:0}.dpad .arm.l{left:0;top:33%}.dpad .arm.r{right:0;top:33%}
+.dpad .arm.on{background:var(--on-bg);border-color:var(--on)}
+.edit .c{outline:2px dashed rgba(255,255,255,.3);outline-offset:3px}
+.edit .c.sel{outline-color:var(--on)}
+
+/* ---- thanh trên ---- */
+#bar{position:fixed;top:max(6px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;z-index:20}
+.pill{height:30px;padding:0 10px;border-radius:15px;background:rgba(40,44,56,.85);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:6px;white-space:nowrap}
+button.pill{cursor:pointer}
+select.pill{appearance:none;-webkit-appearance:none;max-width:38vw;text-overflow:ellipsis}
+#dot{width:9px;height:9px;border-radius:50%;background:var(--danger)}
+#dot.ok{background:var(--ok)}
+#ping{font-variant-numeric:tabular-nums;color:var(--mut);font-size:12px}
+
+#ebar{position:fixed;top:max(6px,env(safe-area-inset-top));left:8px;right:8px;display:none;gap:6px;justify-content:center;z-index:20;flex-wrap:wrap}
+.edit #ebar{display:flex}
+.edit #bar{display:none}
+.pill.pri{background:var(--on);border-color:var(--on);color:#fff;font-weight:600}
+
+/* ---- bảng chỉnh ---- */
+#panel{position:fixed;top:46px;bottom:8px;width:min(310px,46vw);background:var(--panel);border:1px solid rgba(255,255,255,.1);border-radius:12px;
+  padding:10px 12px;overflow:auto;z-index:15;display:none;touch-action:pan-y;user-select:text;-webkit-user-select:text}
+.edit #panel.show{display:block}
+#panel.left{left:8px}#panel.right{right:8px}
+#panel .ph{display:flex;align-items:center;justify-content:space-between;margin:0 0 6px}
+#panel h3{margin:0;font-size:14px}
+#panel .x{width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,.15);background:var(--panel2);cursor:pointer;flex:none}
+#panel label{display:block;color:var(--mut);font-size:12px;margin:8px 0 3px}
+#panel input[type=text],#panel select{width:100%;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:var(--panel2);padding:0 8px}
+#panel input[type=range]{width:100%}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.row>*{flex:1}
+.grid4{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.grid4 select{height:32px}
+.sb{height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:var(--panel2);padding:0 10px;cursor:pointer}
+.sb.danger{color:var(--danger);border-color:rgba(255,92,92,.4)}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chips .sb{flex:0 0 auto;height:28px;font-size:12px}
+.hint{color:var(--mut);font-size:12px;margin:6px 0}
+.chk{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--fg)!important;font-size:13px!important}
+
+#toast{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);background:rgba(30,33,42,.95);border:1px solid rgba(255,255,255,.15);
+  padding:8px 14px;border-radius:10px;z-index:30;max-width:90vw;opacity:0;transition:opacity .2s;pointer-events:none;text-align:center}
+#toast.show{opacity:1}
+#rotate{position:fixed;inset:0;background:var(--bg);z-index:40;display:none;flex-direction:column;gap:14px;align-items:center;justify-content:center;text-align:center;padding:24px}
+@media (orientation:portrait){ body:not(.portrait-ok) #rotate{display:flex} }
+#rotate .big{font-size:48px}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="bar">
+  <div class="pill"><span id="dot"></span><span id="ping">--</span></div>
+  <select id="prof" class="pill"></select>
+  <button id="bEdit" class="pill">✎ Sửa</button>
+  <button id="bFs" class="pill">⛶</button>
+</div>
+
+<div id="ebar">
+  <button class="pill" data-add="button">+ Nút</button>
+  <button class="pill" data-add="stick">+ Joystick</button>
+  <button class="pill" data-add="dpad">+ D-pad</button>
+  <button class="pill" id="bProf">⚙ Hồ sơ</button>
+  <button class="pill pri" id="bDone">✓ Xong</button>
+</div>
+<div id="panel"></div>
+<div id="toast"></div>
+<div id="rotate">
+  <div class="big">⟳</div>
+  <div>Hãy xoay ngang điện thoại để dùng tay cầm.</div>
+  <div class="row" style="flex:0">
+    <button class="sb" id="bRotFs">Toàn màn hình + xoay ngang</button>
+    <button class="sb" id="bRotSkip">Vẫn dùng dọc</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ================= Danh sách phím / hành động =================
+// k:<KeyboardEvent.code>  m:<nút chuột>  g:<nút Xbox>  t:<cò LT/RT>
+const GROUPS = [];
+const ACT = {};               // act -> nhãn ngắn hiển thị trên nút
+function grp(name, items){ GROUPS.push([name, items]); for (const [a, s] of items) ACT[a] = s; }
+grp('Chữ cái', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c => ['k:Key' + c, c]));
+grp('Số', '1234567890'.split('').map(c => ['k:Digit' + c, c]));
+grp('Phím đặc biệt', [['k:Space','Space'],['k:Enter','Enter'],['k:Escape','Esc'],['k:Tab','Tab'],['k:Backspace','⌫'],
+  ['k:ShiftLeft','Shift'],['k:ShiftRight','R-Shift'],['k:ControlLeft','Ctrl'],['k:ControlRight','R-Ctrl'],['k:AltLeft','Alt'],
+  ['k:AltRight','R-Alt'],['k:CapsLock','Caps'],['k:ArrowUp','↑'],['k:ArrowDown','↓'],['k:ArrowLeft','←'],['k:ArrowRight','→'],
+  ['k:Insert','Ins'],['k:Delete','Del'],['k:Home','Home'],['k:End','End'],['k:PageUp','PgUp'],['k:PageDown','PgDn'],
+  ['k:Minus','-'],['k:Equal','='],['k:BracketLeft','['],['k:BracketRight',']'],['k:Semicolon',';'],['k:Quote',"'"],
+  ['k:Backquote','`'],['k:Backslash','\\'],['k:Comma',','],['k:Period','.'],['k:Slash','/']]);
+grp('F1 – F12', Array.from({length:12}, (_, i) => ['k:F' + (i + 1), 'F' + (i + 1)]));
+grp('Bàn phím số', [...'0123456789'.split('').map(d => ['k:Numpad' + d, 'Num' + d]),
+  ['k:NumpadAdd','Num+'],['k:NumpadSubtract','Num-'],['k:NumpadMultiply','Num*'],['k:NumpadDivide','Num/'],
+  ['k:NumpadDecimal','Num.'],['k:NumpadEnter','NumEnter']]);
+grp('Chuột', [['m:left','Chuột T'],['m:right','Chuột P'],['m:middle','Chuột G']]);
+grp('Tay cầm Xbox', [['g:A','A'],['g:B','B'],['g:X','X'],['g:Y','Y'],['g:LB','LB'],['g:RB','RB'],['t:LT','LT'],['t:RT','RT'],
+  ['g:Back','Back'],['g:Start','Start'],['g:Guide','Xbox'],['g:LS','LS'],['g:RS','RS'],
+  ['g:DUp','D↑'],['g:DDown','D↓'],['g:DLeft','D←'],['g:DRight','D→']]);
+const actLabel = a => a ? (ACT[a] || a) : '';
+const isPadAct = a => /^[gt]:/.test(a || '');
+
+const DIR_PRESETS = {
+  'WASD':      {u:'k:KeyW', l:'k:KeyA', d:'k:KeyS', r:'k:KeyD'},
+  'Mũi tên':   {u:'k:ArrowUp', l:'k:ArrowLeft', d:'k:ArrowDown', r:'k:ArrowRight'},
+  'TFGH':      {u:'k:KeyT', l:'k:KeyF', d:'k:KeyG', r:'k:KeyH'},
+  'IJKL':      {u:'k:KeyI', l:'k:KeyJ', d:'k:KeyK', r:'k:KeyL'},
+  'D-pad Xbox':{u:'g:DUp', l:'g:DLeft', d:'g:DDown', r:'g:DRight'},
+};
+
+// ================= Bố cục mặc định =================
+const uid = () => Math.random().toString(36).slice(2, 9);
+function B(x, y, s, act, extra){ return Object.assign({id:uid(), type:'button', x, y, s, act, label:'', shape:'circle', toggle:false}, extra); }
+function defaults(){
+  return [
+    {id:uid(), name:'Tay cầm Xbox', controls:[
+      B(9, 14, 12, 't:LT', {shape:'wide'}), B(22, 14, 12, 'g:LB', {shape:'wide'}),
+      B(78, 14, 12, 'g:RB', {shape:'wide'}), B(91, 14, 12, 't:RT', {shape:'wide'}),
+      B(43, 26, 9, 'g:Back', {shape:'square', label:'⧉'}), B(50, 26, 9, 'g:Guide', {label:'⌂'}), B(57, 26, 9, 'g:Start', {shape:'square', label:'☰'}),
+      {id:uid(), type:'stick', x:17, y:52, s:36, analog:'L', dirs:{u:'',l:'',d:'',r:''}},
+      {id:uid(), type:'dpad', x:36, y:78, s:28, dirs:{...DIR_PRESETS['D-pad Xbox']}},
+      {id:uid(), type:'stick', x:64, y:78, s:28, analog:'R', dirs:{u:'',l:'',d:'',r:''}},
+      B(86, 36, 14, 'g:Y'), B(77, 52, 14, 'g:X'), B(95, 52, 14, 'g:B'), B(86, 68, 14, 'g:A'),
+      B(43, 44, 9, 'g:LS'), B(57, 44, 9, 'g:RS'),
+    ]},
+    {id:uid(), name:'Bàn phím WASD', controls:[
+      {id:uid(), type:'stick', x:18, y:60, s:40, analog:'', dirs:{...DIR_PRESETS['WASD']}},
+      B(88, 74, 19, 'k:Space'), B(73, 82, 13, 'k:KeyF'), B(75, 60, 13, 'k:KeyE'), B(89, 48, 13, 'k:KeyR'),
+      B(62, 70, 13, 'm:left'), B(76, 38, 11, 'k:KeyQ'),
+      B(38, 88, 12, 'k:ShiftLeft', {shape:'wide'}), B(52, 88, 12, 'k:ControlLeft', {shape:'wide'}),
+      B(7, 14, 10, 'k:Escape', {shape:'square'}), B(18, 14, 10, 'k:Tab', {shape:'square'}),
+    ]},
+  ];
+}
+
+// ================= Trạng thái + lưu trữ =================
+let profiles = [], curId = null, editing = false, selId = null, showProf = false;
+const settings = {vibrate: true};
+const store = {
+  get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const cur = () => profiles.find(p => p.id === curId) || profiles[0];
+const ctrl = id => cur().controls.find(c => c.id === id);
+
+let saveTimer = null;
+function save(){
+  store.set('pp.layouts', {profiles});
+  store.set('pp.cur', curId);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 400);
+}
+// Lưu lên máy tính ngay (app Android chỉ đóng trình sửa sau khi lưu xong)
+function saveNow(){
+  clearTimeout(saveTimer);
+  return fetch('/api/layouts', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({profiles})}).catch(() => {});
+}
+async function load(){
+  let data = null, fromServer = false;
+  try { data = await (await fetch('/api/layouts', {cache:'no-store'})).json(); } catch {}
+  fromServer = !!(data && Array.isArray(data.profiles) && data.profiles.length);
+  if (!fromServer) data = store.get('pp.layouts');
+  if (!data || !Array.isArray(data.profiles) || !data.profiles.length) data = {profiles: defaults()};
+  profiles = data.profiles;
+  if (!fromServer) saveNow();   // máy tính chưa có bố cục -> lưu luôn để app Android dùng được
+  curId = store.get('pp.cur');
+  if (!profiles.some(p => p.id === curId)) curId = profiles[0].id;
+  Object.assign(settings, store.get('pp.settings') || {});
+}
+
+// ================= Mạng (WebSocket) =================
+let ws = null, padAvail = null, rtt = null, padWarned = false;
+const $ = s => document.querySelector(s);
+function connect(){
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.onopen = () => { status(); };
+  ws.onmessage = e => {
+    const d = e.data;
+    if (d[0] === 'P') {
+      const v = performance.now() - parseFloat(d.slice(1));
+      rtt = rtt == null ? v : rtt * 0.7 + v * 0.3;
+      status(); return;
+    }
+    let m; try { m = JSON.parse(d); } catch { return; }
+    if (m.t === 'hello') { padAvail = m.pad; padWarned = false; checkPad(); }
+    else if (m.t === 'padfail') { padAvail = false; toast(m.msg, 5000); }
+  };
+  ws.onclose = () => { rtt = null; status(); resetVisuals(); setTimeout(connect, 600); };
+  ws.onerror = () => { try { ws.close(); } catch {} };
+}
+// Gom các lệnh phát sinh trong cùng một sự kiện vào 1 gói (vd: chéo = 2 phím), gửi ngay sau handler -> không thêm độ trễ.
+let outQ = [];
+function send(s){
+  if (!ws || ws.readyState !== 1) return;
+  if (!outQ.length) queueMicrotask(flush);
+  outQ.push(s);
+}
+function flush(){ if (outQ.length && ws && ws.readyState === 1) ws.send(outQ.join('\n')); outQ = []; }
+// Ping đều đặn: đo độ trễ + giữ Wi-Fi điện thoại không vào chế độ tiết kiệm (gây giật).
+setInterval(() => send('p' + performance.now().toFixed(2)), 400);
+
+function status(){
+  const ok = ws && ws.readyState === 1;
+  $('#dot').classList.toggle('ok', ok);
+  $('#ping').textContent = ok ? (rtt == null ? '…' : Math.round(rtt) + ' ms') : 'mất kết nối';
+}
+function checkPad(){
+  if (padAvail === false && !padWarned && cur().controls.some(c => isPadAct(c.act) || c.analog || Object.values(c.dirs || {}).some(isPadAct))) {
+    padWarned = true;
+    toast('Máy tính chưa có tay cầm ảo (ViGEmBus + vgamepad). Nút Xbox sẽ không hoạt động — xem README.', 6000);
+  }
+}
+let toastT = null;
+function toast(msg, ms = 2000){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
+}
+const buzz = () => { if (settings.vibrate && navigator.vibrate) navigator.vibrate(8); };
+
+// ================= Vẽ bố cục =================
+const stage = $('#stage');
+const els = new Map();
+function render(){
+  stage.innerHTML = ''; els.clear(); active.clear(); toggled.clear();
+  document.body.classList.toggle('edit', editing);
+  for (const c of cur().controls) {
+    const el = document.createElement('div');
+    el.className = 'c';
+    el.dataset.id = c.id;
+    el.style.left = c.x + '%'; el.style.top = c.y + '%';
+    el.style.setProperty('--s', c.s + 'vmin');
+    if (c.type === 'button') {
+      el.classList.add('btn');
+      if (c.shape !== 'circle') el.classList.add(c.shape);
+      const txt = c.label || actLabel(c.act);
+      if (txt.length > 4) el.classList.add('small-t');
+      el.textContent = txt;
+    } else if (c.type === 'stick') {
+      el.classList.add('stick');
+      el.innerHTML = '<div class="knob"></div>';
+      if (!c.analog) for (const k of 'udlr') el.insertAdjacentHTML('beforeend', `<span class="dl ${k}"></span>`);
+      if (c.analog) el.insertAdjacentHTML('beforeend', `<span class="dl u" style="top:50%;opacity:.5">${c.analog === 'L' ? 'L' : 'R'}</span>`);
+    } else {
+      el.classList.add('dpad');
+      for (const k of 'udlr') el.insertAdjacentHTML('beforeend', `<div class="arm ${k}"></div>`);
+    }
+    if (c.dirs && !c.analog) for (const k of 'udlr') {
+      const sub = el.querySelector('.' + k + ':not(.knob)');
+      if (sub) sub.textContent = actLabel(c.dirs[k]).replace(/^D(?=[↑↓←→])/, '');
+    }
+    if (c.id === selId) el.classList.add('sel');
+    stage.appendChild(el);
+    els.set(c.id, el);
+  }
+  // danh sách hồ sơ
+  const sel = $('#prof'); sel.innerHTML = '';
+  for (const p of profiles) { const o = new Option(p.name, p.id); o.selected = p.id === curId; sel.add(o); }
+  if (editing) renderPanel();
+}
+
+// ================= Xử lý cảm ứng khi chơi =================
+const active = new Map();   // pointerId -> trạng thái ngón tay
+const toggled = new Set();  // id nút bật/tắt đang bật
+const press = a => { if (a) send('1' + a); };
+const release = a => { if (a) send('0' + a); };
+
+function dirSet(dx, dy, dead){
+  const m = Math.hypot(dx, dy), s = new Set();
+  if (m < dead) return s;
+  const nx = dx / m, ny = dy / m, t = 0.383;   // sin(22.5°) -> 8 hướng, mỗi hướng 45°
+  if (nx > t) s.add('r'); if (nx < -t) s.add('l');
+  if (ny > t) s.add('d'); if (ny < -t) s.add('u');
+  return s;
+}
+
+function startPlay(e, c, el){
+  if (c.type === 'button') {
+    if (c.toggle) {
+      if (toggled.has(c.id)) { toggled.delete(c.id); release(c.act); el.classList.remove('on'); }
+      else { toggled.add(c.id); press(c.act); el.classList.add('on'); }
+      buzz();
+      return;
+    }
+    active.set(e.pointerId, {c, el});
+    press(c.act); el.classList.add('on'); buzz();
+    return;
+  }
+  const r = el.getBoundingClientRect();
+  const st = {c, el, cx: r.left + r.width / 2, cy: r.top + r.height / 2, rad: r.width / 2, dirs: new Set(), lx: 0, ly: 0};
+  active.set(e.pointerId, st);
+  el.classList.add('on');
+  moveStick(st, e);
+}
+
+function moveStick(st, e){
+  const {c, el} = st;
+  let dx = (e.clientX - st.cx) / st.rad, dy = (e.clientY - st.cy) / st.rad;
+  const m = Math.hypot(dx, dy);
+  if (m > 1) { dx /= m; dy /= m; }
+  if (c.type === 'stick') {
+    const knob = el.querySelector('.knob');
+    knob.style.transform = `translate(${dx * st.rad * 0.6}px,${dy * st.rad * 0.6}px)`;
+  }
+  if (c.type === 'stick' && c.analog) {
+    if (Math.abs(dx - st.lx) > 0.005 || Math.abs(dy - st.ly) > 0.005) {
+      st.lx = dx; st.ly = dy;
+      send('a' + c.analog + dx.toFixed(3) + ',' + dy.toFixed(3));
+    }
+    return;
+  }
+  const now = dirSet(dx, dy, c.type === 'dpad' ? 0.2 : 0.3);
+  let changed = false;
+  for (const k of st.dirs) if (!now.has(k)) { release(c.dirs[k]); changed = true; }
+  for (const k of now) if (!st.dirs.has(k)) { press(c.dirs[k]); changed = true; }
+  if (changed) {
+    if (now.size > st.dirs.size || [...now].some(k => !st.dirs.has(k))) buzz();
+    st.dirs = now;
+    el.querySelectorAll('.dl,.arm').forEach(n => n.classList.toggle('on', [...now].some(k => n.classList.contains(k))));
+  }
+}
+
+function endPlay(pid){
+  const st = active.get(pid);
+  if (!st) return;
+  active.delete(pid);
+  const {c, el} = st;
+  el.classList.remove('on');
+  if (c.type === 'button') { release(c.act); return; }
+  if (c.analog) send('a' + c.analog + '0,0');
+  else for (const k of st.dirs) release(c.dirs[k]);
+  const knob = el.querySelector('.knob'); if (knob) knob.style.transform = '';
+  el.querySelectorAll('.dl,.arm').forEach(n => n.classList.remove('on'));
+}
+
+function resetVisuals(){
+  active.clear(); toggled.clear();
+  els.forEach(el => { el.classList.remove('on'); el.querySelectorAll('.on').forEach(n => n.classList.remove('on'));
+    const k = el.querySelector('.knob'); if (k) k.style.transform = ''; });
+}
+function releaseEverything(){ send('r'); resetVisuals(); }
+
+// ================= Kéo thả khi chỉnh sửa =================
+let drag = null;
+function startDrag(e, c, el){
+  selId = c.id; showProf = false;
+  els.forEach(n => n.classList.toggle('sel', n === el));
+  drag = {pid: e.pointerId, c, el, ox: e.clientX - c.x / 100 * innerWidth, oy: e.clientY - c.y / 100 * innerHeight};
+  renderPanel();
+}
+function moveDrag(e){
+  const {c, el} = drag;
+  c.x = Math.round(Math.min(100, Math.max(0, (e.clientX - drag.ox) / innerWidth * 100)) * 10) / 10;
+  c.y = Math.round(Math.min(100, Math.max(0, (e.clientY - drag.oy) / innerHeight * 100)) * 10) / 10;
+  el.style.left = c.x + '%'; el.style.top = c.y + '%';
+  placePanel();
+}
+
+stage.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.c');
+  if (!el) { if (editing) { selId = null; showProf = false; render(); } return; }
+  const c = ctrl(el.dataset.id); if (!c) return;
+  e.preventDefault();
+  try { el.setPointerCapture(e.pointerId); } catch {}
+  editing ? startDrag(e, c, el) : startPlay(e, c, el);
+});
+stage.addEventListener('pointermove', e => {
+  if (drag && drag.pid === e.pointerId) return moveDrag(e);
+  const st = active.get(e.pointerId);
+  if (st && st.c.type !== 'button') moveStick(st, e);
+});
+const up = e => {
+  if (drag && drag.pid === e.pointerId) { drag = null; save(); return; }
+  endPlay(e.pointerId);
+};
+stage.addEventListener('pointerup', up);
+stage.addEventListener('pointercancel', up);
+stage.addEventListener('lostpointercapture', up);
+stage.addEventListener('touchstart', e => e.preventDefault(), {passive: false});
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseEverything(); });
+window.addEventListener('blur', releaseEverything);
+
+// ================= Bảng chỉnh sửa =================
+const panel = $('#panel');
+function h(tag, props = {}, ...kids){
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else if (k in n) n[k] = v; else n.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) n.append(k);
+  return n;
+}
+function actSelect(value, onchange, allowNone = true){
+  const s = h('select', {onchange: () => onchange(s.value)});
+  if (allowNone) s.add(new Option('(không gán)', ''));
+  for (const [g, items] of GROUPS) {
+    const og = document.createElement('optgroup'); og.label = g;
+    for (const [a, short] of items) og.append(new Option(short === a ? a : `${short}`, a));
+    s.append(og);
+  }
+  s.value = value || '';
+  return s;
+}
+const field = (label, input) => [h('label', {textContent: label}), input];
+function changed(){ save(); const keep = selId; render(); selId = keep; padWarned = false; checkPad(); }
+
+function placePanel(){
+  const c = selId && ctrl(selId);
+  const left = c ? c.x > 50 : false;
+  panel.classList.toggle('left', left); panel.classList.toggle('right', !left);
+}
+
+// Tiêu đề bảng + nút ✕ đóng bảng (để lộ các nút bị che phía sau)
+function header(title){
+  return h('div', {className: 'ph'}, h('h3', {textContent: title}),
+    h('button', {className: 'x', textContent: '✕', onclick: () => { selId = null; showProf = false; render(); }}));
+}
+
+// Bảng chỉ hiện khi đang chọn một nút hoặc khi bấm ⚙ Hồ sơ, nên không che màn hình lúc vừa vào chế độ sửa.
+function renderPanel(){
+  panel.innerHTML = '';
+  const c = selId && ctrl(selId);
+  panel.classList.toggle('show', !!c || showProf);
+  if (!c && !showProf) return;
+  placePanel();
+  if (!c) return renderProfilePanel();
+
+  const title = {button:'Nút bấm', stick:'Joystick', dpad:'D-pad'}[c.type];
+  panel.append(header(title));
+
+  if (c.type === 'button') {
+    panel.append(...field('Phím / hành động', actSelect(c.act, v => { c.act = v; changed(); })));
+    panel.append(...field('Chữ hiển thị (để trống = tên phím)',
+      h('input', {type:'text', value: c.label || '', placeholder: actLabel(c.act), maxLength: 12,
+        oninput: e => { c.label = e.target.value; save(); const el = els.get(c.id); el.textContent = c.label || actLabel(c.act); }})));
+    const shape = h('select', {onchange: () => { c.shape = shape.value; changed(); }});
+    [['circle','Tròn'],['square','Vuông'],['wide','Chữ nhật dài']].forEach(([v, t]) => shape.add(new Option(t, v)));
+    shape.value = c.shape || 'circle';
+    panel.append(...field('Hình dạng', shape));
+    const mode = h('select', {onchange: () => { c.toggle = mode.value === '1'; changed(); }});
+    mode.add(new Option('Giữ (nhả tay = nhả phím)', '0')); mode.add(new Option('Bật / tắt (chạm 1 lần giữ luôn)', '1'));
+    mode.value = c.toggle ? '1' : '0';
+    panel.append(...field('Kiểu bấm', mode));
+  }
+
+  if (c.type === 'stick') {
+    const mode = h('select', {onchange: () => { c.analog = mode.value; changed(); }});
+    mode.add(new Option('4 hướng = 4 phím (bàn phím)', ''));
+    mode.add(new Option('Cần analog TRÁI (Xbox)', 'L'));
+    mode.add(new Option('Cần analog PHẢI (Xbox)', 'R'));
+    mode.value = c.analog || '';
+    panel.append(...field('Chế độ', mode));
+  }
+
+  if (c.type === 'dpad' || (c.type === 'stick' && !c.analog)) {
+    c.dirs = c.dirs || {u:'', l:'', d:'', r:''};
+    panel.append(h('label', {textContent: 'Mẫu nhanh'}));
+    const chips = h('div', {className: 'chips'});
+    for (const [name, p] of Object.entries(DIR_PRESETS))
+      chips.append(h('button', {className: 'sb', textContent: name, onclick: () => { c.dirs = {...p}; changed(); }}));
+    panel.append(chips);
+    const g = h('div', {className: 'grid4'});
+    for (const [k, t] of [['u','Lên'],['d','Xuống'],['l','Trái'],['r','Phải']])
+      g.append(h('div', {}, h('label', {textContent: t}), actSelect(c.dirs[k], v => { c.dirs[k] = v; changed(); })));
+    panel.append(g);
+  }
+
+  const size = h('input', {type:'range', min: 6, max: 60, step: 1, value: c.s,
+    oninput: () => { c.s = +size.value; els.get(c.id).style.setProperty('--s', c.s + 'vmin'); },
+    onchange: save});
+  panel.append(...field('Kích thước', size));
+
+  panel.append(h('div', {className: 'row', style: 'margin-top:14px'},
+    h('button', {className: 'sb', textContent: 'Nhân bản', onclick: () => {
+      const n = JSON.parse(JSON.stringify(c)); n.id = uid(); n.x = Math.min(95, c.x + 6); n.y = Math.min(95, c.y + 6);
+      cur().controls.push(n); selId = n.id; changed(); }}),
+    h('button', {className: 'sb danger', textContent: 'Xoá', onclick: () => {
+      cur().controls = cur().controls.filter(x => x !== c); selId = null; changed(); }})));
+  panel.append(h('p', {className: 'hint', textContent: 'Kéo nút trên màn hình để di chuyển. Chạm chỗ trống để bỏ chọn.'}));
+}
+
+function renderProfilePanel(){
+  const p = cur();
+  panel.append(header('Hồ sơ bố cục'));
+  panel.append(h('p', {className: 'hint', textContent: 'Chạm một nút để chỉnh phím, kéo để di chuyển. Dùng các nút “+” ở trên để thêm.'}));
+  panel.append(...field('Tên hồ sơ', h('input', {type:'text', value: p.name, maxLength: 30,
+    oninput: e => { p.name = e.target.value || 'Không tên'; save(); $('#prof').selectedOptions[0].textContent = p.name; }})));
+  // Vùng màn hình máy tính mà app Android hiển thị khi dùng hồ sơ này (game chia đôi màn hình)
+  const vm = h('select', {onchange: () => { p.video = {mode: vm.value}; save(); }});
+  [['full','Toàn màn hình'],['left','Nửa trái'],['right','Nửa phải'],['top','Nửa trên'],['bottom','Nửa dưới']]
+    .forEach(([v, t]) => vm.add(new Option(t, v)));
+  vm.value = (p.video && p.video.mode) || 'full';
+  panel.append(...field('Hình máy tính trên app Android', vm));
+  panel.append(h('div', {className: 'row', style: 'margin-top:10px'},
+    h('button', {className: 'sb', textContent: '+ Hồ sơ trống', onclick: () => {
+      const n = {id: uid(), name: 'Bố cục ' + (profiles.length + 1), controls: []};
+      profiles.push(n); curId = n.id; changed(); }}),
+    h('button', {className: 'sb', textContent: 'Sao chép', onclick: () => {
+      const n = JSON.parse(JSON.stringify(p)); n.id = uid(); n.name = p.name + ' (bản sao)';
+      n.controls.forEach(c => c.id = uid()); profiles.push(n); curId = n.id; changed(); }})));
+  panel.append(h('div', {className: 'row', style: 'margin-top:6px'},
+    h('button', {className: 'sb', textContent: 'Thêm bố cục mẫu', onclick: () => {
+      profiles.push(...defaults()); changed(); toast('Đã thêm 2 bố cục mẫu'); }}),
+    h('button', {className: 'sb danger', textContent: 'Xoá hồ sơ', onclick: () => {
+      if (profiles.length < 2) return toast('Phải còn ít nhất 1 hồ sơ');
+      if (!confirm('Xoá hồ sơ “' + p.name + '”?')) return;
+      profiles = profiles.filter(x => x !== p); curId = profiles[0].id; changed(); }})));
+  const vib = h('input', {type: 'checkbox', checked: settings.vibrate,
+    onchange: () => { settings.vibrate = vib.checked; store.set('pp.settings', settings); }});
+  panel.append(h('label', {className: 'chk'}, vib, 'Rung nhẹ khi bấm'));
+  panel.append(h('p', {className: 'hint', textContent: 'Bố cục được lưu trên máy tính (layouts.json) nên dùng được trên mọi điện thoại.'}));
+}
+
+// ================= Nút thanh trên =================
+$('#prof').addEventListener('change', e => { releaseEverything(); curId = e.target.value; store.set('pp.cur', curId); padWarned = false; render(); checkPad(); });
+$('#bEdit').addEventListener('click', () => {
+  releaseEverything(); editing = true; selId = null; showProf = false; render();
+  toast('Chạm một nút để chỉnh phím, kéo để di chuyển', 2500);
+});
+$('#bDone').addEventListener('click', async () => {
+  if (window.PhonePadApp) { store.set('pp.cur', curId); await saveNow(); PhonePadApp.close(); return; }
+  editing = false; selId = null; showProf = false; save(); render();
+});
+$('#bProf').addEventListener('click', () => { showProf = selId ? true : !showProf; selId = null; render(); });
+document.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => {
+  const t = b.dataset.add;
+  const c = t === 'button' ? B(50, 55, 14, 'k:Space')
+    : t === 'stick' ? {id: uid(), type: 'stick', x: 50, y: 55, s: 34, analog: '', dirs: {...DIR_PRESETS['WASD']}}
+    : {id: uid(), type: 'dpad', x: 50, y: 55, s: 28, dirs: {...DIR_PRESETS['Mũi tên']}};
+  cur().controls.push(c); selId = c.id; changed();
+}));
+async function goFull(){
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen({navigationUI: 'hide'});
+      try { await screen.orientation.lock('landscape'); } catch {}
+    } else await document.exitFullscreen();
+  } catch { toast('Trình duyệt không hỗ trợ toàn màn hình'); }
+}
+$('#bFs').addEventListener('click', goFull);
+$('#bRotFs').addEventListener('click', goFull);
+$('#bRotSkip').addEventListener('click', () => document.body.classList.add('portrait-ok'));
+
+// ================= Khởi động =================
+// ?edit=1: mở thẳng chế độ sửa (app Android dùng trang này làm trình sửa bố cục)
+if (new URLSearchParams(location.search).has('edit')) editing = true;
+load().then(() => { render(); connect(); status(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+aiohttp>=3.8
+# Tuỳ chọn – để điện thoại thành tay cầm Xbox 360 ảo (cài kèm driver ViGEmBus):
+# vgamepad>=0.1

@@ -1,0 +1,324 @@
+{
+ "profiles": [
+  {
+   "id": "ms0pk9e",
+   "name": "Tay cầm Xbox",
+   "controls": [
+    {
+     "id": "x5i6b8g",
+     "type": "button",
+     "x": 9,
+     "y": 14,
+     "s": 12,
+     "act": "t:LT",
+     "label": "",
+     "shape": "wide",
+     "toggle": false
+    },
+    {
+     "id": "v2bwazu",
+     "type": "button",
+     "x": 22,
+     "y": 14,
+     "s": 12,
+     "act": "g:LB",
+     "label": "",
+     "shape": "wide",
+     "toggle": false
+    },
+    {
+     "id": "jeqlve9",
+     "type": "button",
+     "x": 78,
+     "y": 14,
+     "s": 12,
+     "act": "g:RB",
+     "label": "",
+     "shape": "wide",
+     "toggle": false
+    },
+    {
+     "id": "nm6evk7",
+     "type": "button",
+     "x": 91,
+     "y": 14,
+     "s": 12,
+     "act": "t:RT",
+     "label": "",
+     "shape": "wide",
+     "toggle": false
+    },
+    {
+     "id": "l865p8n",
+     "type": "button",
+     "x": 43,
+     "y": 26,
+     "s": 9,
+     "act": "g:Back",
+     "label": "⧉",
+     "shape": "square",
+     "toggle": false
+    },
+    {
+     "id": "4vbpo4h",
+     "type": "button",
+     "x": 50,
+     "y": 26,
+     "s": 9,
+     "act": "g:Guide",
+     "label": "⌂",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "8sfi9gy",
+     "type": "button",
+     "x": 57,
+     "y": 26,
+     "s": 9,
+     "act": "g:Start",
+     "label": "☰",
+     "shape": "square",
+     "toggle": false
+    },
+    {
+     "id": "57fi3t3",
+     "type": "stick",
+     "x": 17,
+     "y": 52,
+     "s": 36,
+     "analog": "L",
+     "dirs": {
+      "u": "",
+      "l": "",
+      "d": "",
+      "r": ""
+     }
+    },
+    {
+     "id": "07a35yh",
+     "type": "dpad",
+     "x": 36,
+     "y": 78,
+     "s": 28,
+     "dirs": {
+      "u": "g:DUp",
+      "l": "g:DLeft",
+      "d": "g:DDown",
+      "r": "g:DRight"
+     }
+    },
+    {
+     "id": "9z3j8s8",
+     "type": "stick",
+     "x": 64,
+     "y": 78,
+     "s": 28,
+     "analog": "R",
+     "dirs": {
+      "u": "",
+      "l": "",
+      "d": "",
+      "r": ""
+     }
+    },
+    {
+     "id": "56uaw4i",
+     "type": "button",
+     "x": 86,
+     "y": 36,
+     "s": 14,
+     "act": "g:Y",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "4vl3g7m",
+     "type": "button",
+     "x": 77,
+     "y": 52,
+     "s": 14,
+     "act": "g:X",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "cre2mtv",
+     "type": "button",
+     "x": 95,
+     "y": 52,
+     "s": 14,
+     "act": "g:B",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "7ekmzw0",
+     "type": "button",
+     "x": 86,
+     "y": 68,
+     "s": 14,
+     "act": "g:A",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "l1b1wfe",
+     "type": "button",
+     "x": 43,
+     "y": 44,
+     "s": 9,
+     "act": "g:LS",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "39ltp87",
+     "type": "button",
+     "x": 57,
+     "y": 44,
+     "s": 9,
+     "act": "g:RS",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    }
+   ]
+  },
+  {
+   "id": "4h6sbby",
+   "name": "Bàn phím WASD",
+   "controls": [
+    {
+     "id": "2n2hutl",
+     "type": "stick",
+     "x": 18,
+     "y": 60,
+     "s": 40,
+     "analog": "",
+     "dirs": {
+      "u": "k:KeyW",
+      "l": "k:KeyA",
+      "d": "k:KeyS",
+      "r": "k:KeyD"
+     }
+    },
+    {
+     "id": "gc1gm9l",
+     "type": "button",
+     "x": 88,
+     "y": 74,
+     "s": 19,
+     "act": "k:Space",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "u06enyq",
+     "type": "button",
+     "x": 73,
+     "y": 82,
+     "s": 13,
+     "act": "k:KeyF",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "pjuze1k",
+     "type": "button",
+     "x": 75,
+     "y": 60,
+     "s": 13,
+     "act": "k:KeyE",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "kolfosj",
+     "type": "button",
+     "x": 89,
+     "y": 48,
+     "s": 13,
+     "act": "k:KeyR",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "vwfwgqn",
+     "type": "button",
+     "x": 62,
+     "y": 70,
+     "s": 13,
+     "act": "m:left",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "w2atkjn",
+     "type": "button",
+     "x": 76,
+     "y": 38,
+     "s": 11,
+     "act": "k:KeyQ",
+     "label": "",
+     "shape": "circle",
+     "toggle": false
+    },
+    {
+     "id": "rcyuz33",
+     "type": "button",
+     "x": 38,
+     "y": 88,
+     "s": 12,
+     "act": "k:ShiftLeft",
+     "label": "",
+     "shape": "wide",
+     "toggle": false
+    },
+    {
+     "id": "cpsr5in",
+     "type": "button",
+     "x": 52,
+     "y": 88,
+     "s": 12,
+     "act": "k:ControlLeft",
+     "label": "",
+     "shape": "wide",
+     "toggle": false
+    },
+    {
+     "id": "qvw5pgj",
+     "type": "button",
+     "x": 7,
+     "y": 14,
+     "s": 10,
+     "act": "k:Escape",
+     "label": "",
+     "shape": "square",
+     "toggle": false
+    },
+    {
+     "id": "0kxdvp6",
+     "type": "button",
+     "x": 18,
+     "y": 14,
+     "s": 10,
+     "act": "k:Tab",
+     "label": "",
+     "shape": "square",
+     "toggle": false
+    }
+   ]
+  }
+ ]
+}

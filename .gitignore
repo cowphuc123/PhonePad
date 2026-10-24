@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+
+# Cài đặt riêng của Claude Code trên máy này
+.claude/
+
+# ffmpeg tải về bằng tools/fetch_ffmpeg.ps1 (~400 MB) và file thử của video_probe
+tools/ffmpeg/
+tools/*.h264
+
+# Gói phát hành do tools/make_release.ps1 tạo
+dist/
+
+# Android
+android/local.properties
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/.idea/
+*.apk
+*.aab
+*.keystore
+*.jks

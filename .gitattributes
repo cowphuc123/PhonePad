@@ -1,0 +1,5 @@
+# gradlew là script sh: giữ LF; file .bat cần CRLF
+android/gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.apk binary
