@@ -54,9 +54,9 @@ class MainActivity : Activity() {
 
         col.addView(TextView(this).apply {
             textSize = 13f; setTextColor(MUTED)
-            text = "• Trên máy tính chạy start.bat.\n" +
+            text = "• Trên máy tính mở PhonePad.exe.\n" +
                 "• Điện thoại và máy tính dùng chung Wi-Fi, hoặc bật Chia sẻ Internet qua USB (trễ thấp nhất).\n" +
-                "• Không tìm thấy? Kiểm tra tường lửa Windows đã cho phép Python, rồi nhập IP hiện trên trang mã QR."
+                "• Không tìm thấy? Kiểm tra tường lửa Windows đã cho phép PhonePad, rồi nhập IP hiện trên cửa sổ PhonePad."
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
 
         setContentView(ScrollView(this).apply { addView(col); setBackgroundColor(BG) })
@@ -102,7 +102,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (r.isEmpty()) {
                     status.text = "Không thấy PhonePad tại $ip"
-                    Toast.makeText(this, "Không kết nối được $ip — máy tính đã chạy start.bat chưa? Tường lửa?", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Không kết nối được $ip — máy tính đã mở PhonePad chưa? Tường lửa?", Toast.LENGTH_LONG).show()
                 } else open(r[0])
             }
         }.start()

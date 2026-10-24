@@ -68,10 +68,9 @@ import sys
 import threading
 import time
 from ctypes import wintypes
-from pathlib import Path
+import shutil
 
-BASE = Path(__file__).resolve().parent
-FFMPEG_DIR = BASE / "tools" / "ffmpeg" / "bin"
+import paths
 
 PKT_TYPE = 0x56
 HEADER = struct.Struct("<BBHHHII")
@@ -83,11 +82,17 @@ FLAG_IDR = 0x01
 DEFAULT_PIPELINES = ["nvenc", "qsv", "mf"]
 
 
+def ffmpeg_path():
+    """ffmpeg.exe đã tải (DATA_DIR/ffmpeg hoặc tools/ffmpeg/bin) hoặc trong PATH; None nếu không có."""
+    for d in paths.FFMPEG_DIRS:
+        exe = d / "ffmpeg.exe"
+        if exe.exists():
+            return str(exe)
+    return shutil.which("ffmpeg")
+
+
 def find_ffmpeg():
-    exe = FFMPEG_DIR / "ffmpeg.exe"
-    if exe.exists():
-        return str(exe)
-    return "ffmpeg"  # trong PATH
+    return ffmpeg_path() or "ffmpeg"
 
 
 # ---------------------------------------------------------------------------

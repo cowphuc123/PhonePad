@@ -584,7 +584,7 @@ $('#bRotSkip').addEventListener('click', () => document.body.classList.add('port
 // ================= Khởi động =================
 // ?edit=1: mở thẳng chế độ sửa (app Android dùng trang này làm trình sửa bố cục)
 if (new URLSearchParams(location.search).has('edit')) editing = true;
-load().then(() => { render(); connect(); status(); });
+load().then(() => { render(); if (!window.PhonePadApp) connect(); status(); });  // app Android: chỉ sửa bố cục, nút đi qua UDP
 </script>
 </body>
 </html>

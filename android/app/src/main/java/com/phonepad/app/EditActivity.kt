@@ -19,6 +19,7 @@ class EditActivity : Activity() {
             setBackgroundColor(BG)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.userAgentString = settings.userAgentString + " " + USER_AGENT
             webViewClient = WebViewClient()
             // Nút "✓ Xong" trên trang gọi PhonePadApp.close() sau khi đã lưu
             addJavascriptInterface(object {

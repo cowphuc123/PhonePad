@@ -76,11 +76,15 @@ object Discovery {
     }
 }
 
+/** Máy tính từ chối mọi yêu cầu HTTP không có "PhonePadApp" trong User-Agent (chặn trình duyệt). */
+const val USER_AGENT = "PhonePadApp/" + BuildConfig.VERSION_NAME
+
 fun httpGet(pc: PcInfo, path: String): String {
     val c = URL("http://${pc.host}:${pc.http}$path").openConnection()
     c.connectTimeout = 2000
     c.readTimeout = 3000
     c.useCaches = false
+    c.setRequestProperty("User-Agent", USER_AGENT)  // máy tính chỉ trả lời app PhonePad
     return c.getInputStream().use { it.readBytes().toString(Charsets.UTF_8) }
 }
 

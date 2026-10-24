@@ -1,95 +1,51 @@
 """PhonePad - biến điện thoại thành tay cầm / bàn phím ảo cho máy tính qua mạng LAN.
 
-Chạy:  python server.py            (mặc định cổng 8765)
-       python server.py --port 9000 --no-browser
+Chỉ nhận kết nối từ app Android PhonePad (UDP cổng 8766 cho nút bấm + hình; HTTP cổng 8765 cho
+bố cục và trình sửa bố cục trong app). Trình duyệt thường bị từ chối.
+
+Chạy:  python server.py              mở cửa sổ trạng thái (bản exe cũng chạy thế này)
+       python server.py --console    chỉ in ra console, không mở cửa sổ
+       python server.py --port 9000 --udp-port 9001
 """
 import argparse
 import asyncio
 import json
 import socket
 import sys
-import webbrowser
-from pathlib import Path
+import threading
 
-from aiohttp import WSMsgType, web
+from aiohttp import web
 
-from session import PAD_LIB, Session
+import paths
+from session import PAD_LIB
 from udp_server import start_udp
 from video_control import VideoControl
 
-BASE = Path(__file__).resolve().parent
-STATIC = BASE / "static"
-LAYOUTS = BASE / "layouts.json"
-APK = BASE / "android" / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"
+# WebView sửa bố cục và httpGet của app gắn chuỗi này vào User-Agent
+APP_UA = "PhonePadApp"
+RELEASES = "https://github.com/cowphuc123/PhonePad/releases/latest"
+
+REFUSED = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<body style="font-family:sans-serif;background:#111;color:#eee;padding:24px;line-height:1.5">
+<h2>PhonePad chỉ nhận kết nối từ app Android</h2>
+<p>Tải app PhonePad (.apk) tại <a style="color:#6cf" href="{0}">{0}</a>, cài lên điện thoại rồi mở app:
+app tự tìm thấy máy tính này.</p></body>"""
 
 
-async def get_apk(request):
-    if not APK.exists():
-        raise web.HTTPNotFound(text="Chưa build app Android (cd android && gradlew assembleDebug)")
-    return web.FileResponse(APK, headers={
-        "Content-Type": "application/vnd.android.package-archive",
-        "Content-Disposition": 'attachment; filename="PhonePad.apk"',
-    })
+@web.middleware
+async def app_only(request, handler):
+    if APP_UA not in request.headers.get("User-Agent", ""):
+        return web.Response(status=403, text=REFUSED.format(RELEASES), content_type="text/html")
+    return await handler(request)
 
 
-async def ws_handler(request):
-    ws = web.WebSocketResponse(compress=False, max_msg_size=8192, heartbeat=10)
-    await ws.prepare(request)
-    sock = request.transport.get_extra_info("socket") if request.transport else None
-    if sock is not None:
-        try:
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)  # tắt Nagle: gửi ngay, không gom gói
-        except OSError:
-            pass
-
-    sess = Session(request.remote)
-    clients = request.app["clients"]
-    clients.add(sess)
-    print("[+] Điện thoại kết nối: %s  (đang có %d)" % (sess.peer, len(clients)))
-    await ws.send_str(json.dumps({"t": "hello", "pad": PAD_LIB}))
-    reported_pad_error = False
-    try:
-        async for msg in ws:
-            if msg.type != WSMsgType.TEXT:
-                continue
-            for m in msg.data.split("\n"):
-                if not m:
-                    continue
-                c = m[0]
-                if c == "1":
-                    sess.press(m[1:])
-                elif c == "0":
-                    sess.release(m[1:])
-                elif c == "a":
-                    try:
-                        x, y = m[2:].split(",")
-                        sess.analog(m[1], float(x), float(y))
-                    except ValueError:
-                        pass
-                elif c == "p":
-                    await ws.send_str("P" + m[1:])
-                elif c == "r":
-                    sess.release_all()
-            if sess.pad_error and not reported_pad_error:
-                reported_pad_error = True
-                print("[!] %s" % sess.pad_error)
-                await ws.send_str(json.dumps({"t": "padfail", "msg": sess.pad_error}))
-    finally:
-        sess.close()
-        clients.discard(sess)
-        print("[-] Điện thoại ngắt kết nối: %s  (còn %d)" % (sess.peer, len(clients)))
-    return ws
-
-
-def _html(name):
-    async def handler(request):
-        return web.FileResponse(STATIC / name, headers={"Cache-Control": "no-cache"})
-    return handler
+async def editor(request):
+    return web.FileResponse(paths.STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 async def get_layouts(request):
-    if LAYOUTS.exists():
-        return web.Response(text=LAYOUTS.read_text(encoding="utf-8"), content_type="application/json")
+    if paths.LAYOUTS.exists():
+        return web.Response(text=paths.LAYOUTS.read_text(encoding="utf-8"), content_type="application/json")
     return web.json_response({})
 
 
@@ -101,7 +57,7 @@ async def put_layouts(request):
         data = json.loads(raw)
     except ValueError:
         raise web.HTTPBadRequest(text="JSON không hợp lệ")
-    LAYOUTS.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    paths.LAYOUTS.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     return web.json_response({"ok": True})
 
 
@@ -125,9 +81,9 @@ def lan_ips():
 
 
 def make_app(port, udp_port):
-    app = web.Application()
-    app["clients"] = set()
+    app = web.Application(middlewares=[app_only])
     app["port"] = port
+    app["udp_port"] = udp_port
     app["udp"] = None
     app["video"] = None
 
@@ -146,50 +102,103 @@ def make_app(port, udp_port):
     app.on_cleanup.append(udp_stop)
 
     async def status(request):
-        return web.json_response({
-            "clients": [s.peer for s in app["clients"]]
-                       + ([p.sess.peer for p in app["udp"].peers.values()] if app["udp"] else []),
-            "urls": ["http://%s:%d" % (ip, port) for ip in lan_ips()],
-            "pad": PAD_LIB,
-        })
+        return web.json_response({"clients": phones(app), "pad": PAD_LIB})
 
-    app.router.add_get("/", _html("index.html"))
-    app.router.add_get("/host", _html("host.html"))
-    app.router.add_get("/ws", ws_handler)
+    app.router.add_get("/", editor)  # trình sửa bố cục, app mở bằng /?edit=1
     app.router.add_get("/api/layouts", get_layouts)
     app.router.add_post("/api/layouts", put_layouts)
     app.router.add_get("/api/status", status)
-    app.router.add_get("/app.apk", get_apk)
     return app
+
+
+def phones(app):
+    """Tên các điện thoại đang kết nối (gọi được từ thread khác)."""
+    udp = app["udp"]
+    if udp is None:
+        return []
+    try:
+        return [p.sess.peer for p in list(udp.peers.values())]
+    except RuntimeError:  # dict đổi kích thước giữa chừng
+        return []
+
+
+class ServerThread:
+    """Chạy aiohttp + UDP trong một thread nền có event loop riêng (thread chính để cho cửa sổ)."""
+
+    def __init__(self, port, udp_port):
+        self.app = make_app(port, udp_port)
+        self.loop = asyncio.new_event_loop()
+        self.runner = None
+        self.error = None
+        self._ready = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="PhonePadServer", daemon=True)
+
+    def start(self, timeout=10):
+        """Trả về None nếu chạy được, ngược lại là thông báo lỗi (vd. cổng đang bị dùng)."""
+        self._thread.start()
+        self._ready.wait(timeout)
+        return self.error
+
+    def _run(self):
+        asyncio.set_event_loop(self.loop)
+        try:
+            self.loop.run_until_complete(self._start())
+        except OSError as e:
+            self.error = ("Không mở được cổng %d/%d (PhonePad đã đang chạy?): %s"
+                          % (self.app["port"], self.app["udp_port"], e))
+        except Exception as e:
+            self.error = "Lỗi khởi động: %r" % e
+        self._ready.set()
+        if self.error is None:
+            self.loop.run_forever()
+        self.loop.run_until_complete(self._cleanup())
+        self.loop.close()
+
+    async def _start(self):
+        self.runner = web.AppRunner(self.app, access_log=None)
+        await self.runner.setup()
+        await web.TCPSite(self.runner, "0.0.0.0", self.app["port"]).start()
+
+    async def _cleanup(self):
+        if self.runner is not None:
+            await self.runner.cleanup()
+
+    def stop(self):
+        if self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        self._thread.join(timeout=5)
+
+
+def print_banner(args):
+    print("=" * 56)
+    print(" PhonePad đang chạy. Mở app PhonePad trên điện thoại (cùng Wi-Fi):")
+    print(" app tự tìm máy tính. Không thấy thì nhập IP:")
+    for ip in lan_ips():
+        print("   %s" % ip)
+    print(" Tay cầm Xbox ảo: %s" % ("SẴN SÀNG" if PAD_LIB else "chưa có (cần driver ViGEmBus)"))
+    print("=" * 56)
 
 
 def main():
     ap = argparse.ArgumentParser(description="PhonePad server")
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=8765, help="cổng HTTP (bố cục, trình sửa trong app)")
     ap.add_argument("--udp-port", type=int, default=8766, help="cổng UDP cho app Android")
-    ap.add_argument("--no-browser", action="store_true", help="không tự mở trang mã QR")
+    ap.add_argument("--console", action="store_true", help="không mở cửa sổ, chỉ in ra console")
     args = ap.parse_args()
 
-    if hasattr(sys.stdout, "reconfigure"):
+    if sys.stdout is not None and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    paths.ensure_layouts()
 
-    print("=" * 56)
-    print(" PhonePad đang chạy. Trên điện thoại (cùng Wi-Fi) mở:")
-    for ip in lan_ips():
-        print("   http://%s:%d" % (ip, args.port))
-    print(" App Android: tự tìm máy tính (UDP cổng %d)" % args.udp_port)
-    print(" Tay cầm Xbox ảo: %s" % ("SẴN SÀNG" if PAD_LIB else "chưa có (pip install vgamepad)"))
+    if not args.console:
+        import gui
+        return gui.run(args)
+
+    print_banner(args)
     print(" Nhấn Ctrl+C để tắt.")
-    print("=" * 56)
-
-    app = make_app(args.port, args.udp_port)
-    if not args.no_browser:
-        async def open_host(_app):
-            asyncio.get_running_loop().call_later(
-                0.5, webbrowser.open, "http://localhost:%d/host" % args.port)
-        app.on_startup.append(open_host)
-    web.run_app(app, host="0.0.0.0", port=args.port, print=None, access_log=None)
+    web.run_app(make_app(args.port, args.udp_port), host="0.0.0.0", port=args.port,
+                print=None, access_log=None)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

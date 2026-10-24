@@ -9,7 +9,6 @@ import asyncio
 import concurrent.futures
 import ctypes
 import json
-import shutil
 import socket
 import time
 
@@ -58,7 +57,7 @@ class VideoControl:
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4 << 20)
         except OSError:
             pass
-        self.vs = video.VideoStreamer(self.sock.sendto, log=print) if video and self.ffmpeg_ok() else None
+        self.vs = None  # tạo khi điện thoại xin hình lần đầu (ffmpeg có thể vừa được tải về)
         self.pool = concurrent.futures.ThreadPoolExecutor(1)  # start/stop chặn tới 1-3 s: không chạy trong event loop
         self.addr = None
         self.key = None
@@ -70,7 +69,12 @@ class VideoControl:
 
     @staticmethod
     def ffmpeg_ok():
-        return video.FFMPEG_DIR.joinpath("ffmpeg.exe").exists() or shutil.which("ffmpeg") is not None
+        return video is not None and video.ffmpeg_path() is not None
+
+    @property
+    def watching(self):
+        """(IP điện thoại đang xem hình hoặc None, đường nén đang chạy hoặc None)."""
+        return (self.addr[0] if self.addr else None), (self.vs.pipeline if self.vs else None)
 
     def info(self, msg, addr):
         self.udp.send(b"I" + json.dumps({"t": "videofail", "msg": msg}).encode(), addr)
@@ -82,10 +86,12 @@ class VideoControl:
                 req = json.loads(data[1:].decode("utf-8"))
             except ValueError:
                 return
+            if self.vs is None and self.ffmpeg_ok():
+                self.vs = video.VideoStreamer(self.sock.sendto, log=print)
             if self.vs is None:
                 if time.monotonic() - self.last > 5:
                     self.last = time.monotonic()
-                    self.info("Máy tính chưa có ffmpeg: chạy tools\\fetch_ffmpeg.ps1 rồi mở lại start.bat", addr)
+                    self.info('Máy tính chưa có ffmpeg: bấm "Tải ffmpeg" trên cửa sổ PhonePad', addr)
                 return
             self.last = time.monotonic()
             key = json.dumps(req, sort_keys=True)
