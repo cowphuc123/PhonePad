@@ -62,7 +62,12 @@ Trong app bấm **📺** để bật/tắt **hình máy tính** làm nền phía
 - Lần đầu: trên cửa sổ PhonePad bấm **Tải ffmpeg** (chỉ một lần).
 - **Chỉ phát một app:** ở ô **Phát lên điện thoại** trên cửa sổ PhonePad chọn cửa sổ của app/game thay vì *Toàn màn hình*.
   Điện thoại chỉ thấy đúng cửa sổ đó, kể cả khi nó bị cửa sổ khác che hay bạn đang dùng app khác (Alt+Tab).
-  Thu nhỏ hẳn cửa sổ xuống thanh tác vụ thì Windows ngừng vẽ nó: điện thoại giữ hình cuối, mở lên là chạy tiếp.
+  Bấm **–** (thu nhỏ) trên cửa sổ đó thì PhonePad *giấu* nó thay vì để thu nhỏ thật (ô *Bấm – trên cửa sổ đó thì
+  giấu đi nhưng vẫn chạy cho điện thoại*, bật sẵn): bạn không thấy cửa sổ nữa, nhưng game vẫn chạy, điện thoại vẫn
+  thấy hình và điều khiển được bằng hồ sơ **Tay cầm Xbox** (phím bàn phím từ điện thoại luôn vào cửa sổ đang
+  được chọn trên máy tính nên không điều khiển được cửa sổ đang giấu). Bấm nút của nó trên thanh tác vụ hoặc
+  Alt+Tab tới nó là hiện lại. Tắt ô đó thì cửa sổ thu nhỏ thật: Windows ngừng vẽ nó, điện thoại giữ hình cuối.
+  Game tự tạm dừng khi không được chọn (một số game Unity) thì vẫn dừng, cần bật tuỳ chọn chạy nền của game.
   Game tắt rồi mở lại vẫn tự nhận ra (theo tên chương trình); lựa chọn được nhớ cho lần sau.
   Chế độ này cần bản ffmpeg khác (nút **Tải ffmpeg** hiện lại, ~115 MB) và chạy tốt nhất với game ở chế độ
   cửa sổ / không viền (*windowed / borderless*), vì game toàn màn hình thật thường tự thu nhỏ khi Alt+Tab.

@@ -17,6 +17,7 @@ from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 import ffmpeg_fetch
+import keeper
 import paths
 import server
 import updater
@@ -105,14 +106,21 @@ class StatusWindow:
         self.src.pack(side="left", fill="x", expand=True)
         self.src.bind("<<ComboboxSelected>>", self.on_source)
         self.win_items = []  # song song với các mục sau "Toàn màn hình": (hwnd, title, exe)
+        # bấm "–" trên cửa sổ đó: giấu đi nhưng vẫn chạy (cửa sổ thu nhỏ thật thì không có hình) - keeper.py
+        self.keep_var = tk.BooleanVar(value=self._setting("keep_minimized", True))
+        ttk.Checkbutton(root, variable=self.keep_var, command=self.on_keep,
+                        text="Bấm – trên cửa sổ đó thì giấu đi nhưng vẫn chạy cho điện thoại").grid(
+            row=7, column=1, sticky="w")
+        self.keeper = keeper.WindowKeeper(log=print)
+        self.keeper.enabled = self.keep_var.get()
         self.src_lbl = tk.Label(root, font=("Segoe UI", 9), fg=GREY, justify="left", wraplength=300)
-        self.src_lbl.grid(row=7, column=1, sticky="w")
+        self.src_lbl.grid(row=8, column=1, sticky="w")
 
-        tk.Label(root, text="Nhật ký", font=("Segoe UI", 9), fg=GREY).grid(row=9, column=0, pady=(8, 0), **pad)
+        tk.Label(root, text="Nhật ký", font=("Segoe UI", 9), fg=GREY).grid(row=10, column=0, pady=(8, 0), **pad)
         self.log = ScrolledText(root, height=10, font=("Consolas", 9), state="disabled", wrap="word")
-        self.log.grid(row=10, column=0, columnspan=2, padx=14, pady=(0, 6), sticky="nsew")
+        self.log.grid(row=11, column=0, columnspan=2, padx=14, pady=(0, 6), sticky="nsew")
         bf = tk.Frame(root)
-        bf.grid(row=11, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="we")
+        bf.grid(row=12, column=0, columnspan=2, padx=14, pady=(0, 12), sticky="we")
         ttk.Button(bf, text="Mở thư mục dữ liệu",
                    command=lambda: os.startfile(paths.DATA_DIR)).pack(side="left")
         ttk.Button(bf, text="Tắt PhonePad", command=self.quit).pack(side="right")
@@ -122,7 +130,7 @@ class StatusWindow:
         self.update_info = None
         self.updating = False
         root.columnconfigure(1, weight=1)
-        root.rowconfigure(10, weight=1)
+        root.rowconfigure(11, weight=1)
         root.protocol("WM_DELETE_WINDOW", self.quit)
 
         sys.stdout = _LogWriter(self.q, sys.__stdout__)
@@ -195,13 +203,18 @@ class StatusWindow:
                 self.ff_btn.pack(side="left")
         if vc is not None and vc.target:
             vc.window_target()  # cập nhật trạng thái cửa sổ (tìm lại nếu game vừa mở lại)
+            self.keeper.target = vc.target["hwnd"] if vc.target_state in ("ok", "minimized") else None
             note = {
                 "ok": "Chỉ cửa sổ này, kể cả khi bị che hay đang dùng app khác.",
                 "minimized": "Cửa sổ đang thu nhỏ: điện thoại giữ hình cuối, mở cửa sổ lên là chạy tiếp.",
                 "closed": "Cửa sổ đã đóng: chờ app mở lại (tự nhận ra).",
             }.get(vc.target_state, "")
+            if self.keeper.hidden:
+                note = ("Đang giấu cửa sổ (đã bấm –): game vẫn chạy cho điện thoại. Bấm nút của nó trên "
+                        "thanh tác vụ để hiện lại.")
             self.src_lbl.configure(text=note, fg=RED if vc.target_state == "closed" else GREY)
         else:
+            self.keeper.target = None
             self.src_lbl.configure(text="")
         self.root.after(300, self.tick)
 
@@ -246,11 +259,24 @@ class StatusWindow:
         print('Phát: chỉ cửa sổ "%s"%s' % (title, "" if found else " (chưa mở)"))
 
     def save_source(self, target):
+        self._save_setting("window", {"exe": target["exe"], "title": target["title"]} if target else None)
+
+    def on_keep(self):
+        self.keeper.enabled = self.keep_var.get()
+        self._save_setting("keep_minimized", self.keeper.enabled)
+
+    def _setting(self, key, default=None):
+        try:
+            return json.loads(paths.SETTINGS.read_text(encoding="utf-8")).get(key, default)
+        except (OSError, ValueError):
+            return default
+
+    def _save_setting(self, key, value):
         try:
             data = json.loads(paths.SETTINGS.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = {}
-        data["window"] = {"exe": target["exe"], "title": target["title"]} if target else None
+        data[key] = value
         try:
             paths.SETTINGS.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
         except OSError as e:
@@ -263,7 +289,7 @@ class StatusWindow:
             return
         self.downloading = True
         self.ff_btn.pack_forget()
-        self.ff_bar.grid(row=8, column=1, sticky="w", pady=(2, 0))
+        self.ff_bar.grid(row=9, column=1, sticky="w", pady=(2, 0))
         vc = self.srv.app["video"]
         kind = "window" if vc is not None and vc.target else "screen"
         version, url = ffmpeg_fetch.KINDS[kind][:2]
@@ -338,6 +364,7 @@ class StatusWindow:
     def quit(self, relaunch=None):
         print("Đang tắt...")
         self.root.update()
+        self.keeper.close()  # cửa sổ đang giấu phải hiện lại, không thì nó trong suốt mãi
         self.srv.stop()  # nhả cổng 8765/8766 trước khi bản mới mở
         if relaunch is not None:
             try:
