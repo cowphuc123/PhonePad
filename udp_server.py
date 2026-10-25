@@ -10,6 +10,8 @@ Gói máy tính -> điện thoại:
   b"PPD!" + JSON                  trả lời tìm máy
   b"Q" + 8 byte ping + server_us:u32
   b"I" + JSON                     thông báo (vd. không tạo được tay cầm ảo)
+                                  {"t":"player","n":2} = tay cầm ảo của điện thoại này là người chơi 2
+                                  (số XInput Windows gán, game dùng số này), gửi lại mỗi 3 s
 
 Gửi *trạng thái* thay vì *sự kiện*: mất gói không sao vì gói sau mang đủ trạng thái, không bao giờ kẹt phím.
 """
@@ -23,6 +25,7 @@ from session import PAD_LIB, Session
 
 STATE_HDR = struct.Struct("<I4hB")
 PEER_TIMEOUT = 1.0  # quá 1 s không nhận gói nào -> nhả hết phím của điện thoại đó
+PLAYER_RESEND = 3.0
 
 
 def now_us32():
@@ -38,6 +41,10 @@ class UdpPeer:
         self.held = set()
         self.axes = {"L": (0.0, 0.0), "R": (0.0, 0.0)}
         self.reported_pad_error = False
+        self.player = None        # 1-4: số người chơi của tay cầm ảo (tạo khi bấm nút Xbox đầu tiên)
+        self.player_sent = 0.0
+        self.pad_since = None
+        self.reported_no_slot = False
 
     def apply(self, seq, lx, ly, rx, ry, flags, held):
         self.seq = seq
@@ -136,6 +143,29 @@ class UdpServer(asyncio.DatagramProtocol):
             for addr, peer in list(self.peers.items()):
                 if now - peer.last > PEER_TIMEOUT:
                     self._drop(addr)
+                else:
+                    self._check_player(peer, now)
+
+    def _check_player(self, peer, now):
+        """Báo cho điện thoại nó là người chơi số mấy (để 4 người biết ai là ai)."""
+        if peer.sess.pad is None:
+            return
+        if peer.player is None:
+            if peer.pad_since is None:
+                peer.pad_since = now
+            peer.player = peer.sess.player()
+            if peer.player is not None:
+                print("[pad] %s là tay cầm %d" % (peer.addr[0], peer.player))
+            elif now - peer.pad_since > 2.0 and not peer.reported_no_slot:
+                peer.reported_no_slot = True
+                msg = ("Windows chỉ nhận 4 tay cầm Xbox (kể cả tay cầm thật đang cắm): tay cầm của điện "
+                       "thoại này không có số người chơi, game không thấy nó.")
+                print("[!] %s: %s" % (peer.addr[0], msg))
+                self.send(b"I" + json.dumps({"t": "padfail", "msg": msg}).encode(), peer.addr)
+                return
+        if peer.player is not None and now - peer.player_sent > PLAYER_RESEND:
+            peer.player_sent = now
+            self.send(b"I" + json.dumps({"t": "player", "n": peer.player}).encode(), peer.addr)
 
     def close_all(self):
         for addr in list(self.peers):

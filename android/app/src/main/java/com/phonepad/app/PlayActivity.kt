@@ -38,6 +38,7 @@ class PlayActivity : Activity(), InputLink.Listener, VideoLink.Listener {
     private var rtt = -1f
     private var linkOk = true
     private var videoStats = ""
+    private var player = 0  // số tay cầm Xbox ảo máy tính báo (người chơi 1-4), 0 = chưa có
     private var openedEditorForDefaults = false
     private val prefs by lazy { getSharedPreferences("pp", MODE_PRIVATE) }
     private var videoOn: Boolean
@@ -221,10 +222,11 @@ class PlayActivity : Activity(), InputLink.Listener, VideoLink.Listener {
 
     // ---------- trạng thái ----------
     private fun updateStatus() {
+        val p = if (player > 0) "🎮$player " else ""
         statusPill.text = when {
             !linkOk -> "● mất kết nối"
-            rtt < 0 -> "● …"
-            else -> "● ${rtt.toInt()} ms$videoStats"
+            rtt < 0 -> "$p● …"
+            else -> "$p● ${rtt.toInt()} ms$videoStats"
         }
         statusPill.setTextColor(if (linkOk && rtt >= 0) 0xFF3DDC84.toInt() else 0xFFFF5C5C.toInt())
     }
@@ -242,6 +244,16 @@ class PlayActivity : Activity(), InputLink.Listener, VideoLink.Listener {
     }
 
     override fun onInfo(msg: JSONObject) = runOnUiThread {
-        if (msg.optString("t") in setOf("padfail", "videofail")) Toast.makeText(this, msg.optString("msg"), Toast.LENGTH_LONG).show()
+        when (msg.optString("t")) {
+            "padfail", "videofail" -> Toast.makeText(this, msg.optString("msg"), Toast.LENGTH_LONG).show()
+            "player" -> {  // máy tính nhắc lại mỗi 3 s: chỉ báo khi số đổi
+                val n = msg.optInt("n")
+                if (n != player) {
+                    player = n
+                    Toast.makeText(this, "Bạn là tay cầm $n (người chơi $n)", Toast.LENGTH_SHORT).show()
+                    updateStatus()
+                }
+            }
+        }
     }
 }

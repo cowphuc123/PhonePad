@@ -37,13 +37,13 @@ SWP_FLAGS = 0x0001 | 0x0002 | 0x0010  # NOSIZE | NOMOVE | NOACTIVATE
 
 
 class WindowKeeper:
-    """keeper.target = hwnd cần giữ (None = không giữ). Chạy thread riêng, kiểm tra 20 lần/giây."""
+    """keeper.targets = các hwnd cần giữ (mỗi người chơi một cửa sổ). Chạy thread riêng, 20 lần/giây."""
 
     def __init__(self, log=print):
         self.log = log
         self.enabled = True
-        self.target = None
-        self._hidden = None   # (hwnd, exstyle cũ, (key, alpha, flags) layered cũ hoặc None)
+        self.targets = frozenset()
+        self._hidden = {}   # hwnd -> (exstyle cũ, (key, alpha, flags) layered cũ hoặc None)
         self._lock = threading.Lock()
         self._stop = threading.Event()
         threading.Thread(target=self._run, name="WindowKeeper", daemon=True).start()
@@ -51,21 +51,21 @@ class WindowKeeper:
 
     @property
     def hidden(self):
-        """Cửa sổ đang được giấu (để cửa sổ PhonePad hiển thị)."""
-        h = self._hidden
-        return h[0] if h else None
+        """Các cửa sổ đang được giấu (để cửa sổ PhonePad hiển thị)."""
+        return list(self._hidden)
 
     def close(self):
-        """Trả lại cửa sổ đang giấu (gọi khi tắt PhonePad, đổi cửa sổ, tắt tính năng)."""
+        """Trả lại mọi cửa sổ đang giấu (gọi khi tắt PhonePad)."""
         self._stop.set()
-        self.unhide()
+        for hwnd in self.hidden:
+            self.unhide(hwnd)
 
-    def unhide(self):
+    def unhide(self, hwnd):
         with self._lock:
-            h, self._hidden = self._hidden, None
+            h = self._hidden.pop(hwnd, None)
         if not h:
             return
-        hwnd, ex, layered = h
+        ex, layered = h
         if not u32.IsWindow(hwnd):
             return
         u32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex)
@@ -87,26 +87,27 @@ class WindowKeeper:
         u32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
         u32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_FLAGS)
         with self._lock:
-            self._hidden = (hwnd, ex, layered)
+            self._hidden[hwnd] = (ex, layered)
         self.log("[giữ cửa sổ] cửa sổ bị thu nhỏ: giấu đi nhưng vẫn chạy cho điện thoại")
 
     def _run(self):
         while not self._stop.wait(0.05):
             try:
-                target = self.target if self.enabled else None
-                hidden = self.hidden
-                if hidden and (hidden != target or not u32.IsWindow(hidden)):
-                    self.unhide()  # đổi cửa sổ / tắt tính năng / cửa sổ đã đóng
-                    continue
-                if not target or not u32.IsWindow(target):
-                    continue
-                if hidden:
-                    if u32.GetForegroundWindow() == target:
-                        self.unhide()  # người dùng bấm nút trên thanh tác vụ / Alt+Tab tới nó
-                    elif u32.IsIconic(target):
-                        u32.ShowWindow(target, SW_SHOWNOACTIVATE)  # bấm "–" lần nữa khi đang giấu
-                        u32.SetWindowPos(target, HWND_BOTTOM, 0, 0, 0, 0, SWP_FLAGS)
-                elif u32.IsIconic(target):
-                    self._hide(target)
+                targets = self.targets if self.enabled else frozenset()
+                for hwnd in self.hidden:
+                    if hwnd not in targets or not u32.IsWindow(hwnd):
+                        self.unhide(hwnd)  # đổi cửa sổ / tắt tính năng / cửa sổ đã đóng
+                fg = u32.GetForegroundWindow()
+                for hwnd in targets:
+                    if not hwnd or not u32.IsWindow(hwnd):
+                        continue
+                    if hwnd in self._hidden:
+                        if fg == hwnd:
+                            self.unhide(hwnd)  # người dùng bấm nút trên thanh tác vụ / Alt+Tab tới nó
+                        elif u32.IsIconic(hwnd):
+                            u32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)  # bấm "–" lần nữa khi đang giấu
+                            u32.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_FLAGS)
+                    elif u32.IsIconic(hwnd):
+                        self._hide(hwnd)
             except Exception as e:  # không để lỗi làm chết thread
                 self.log("[giữ cửa sổ] lỗi: %r" % e)

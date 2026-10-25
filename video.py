@@ -54,13 +54,15 @@ loop.call_soon_threadsafe. Lỗi trong send_fn được nuốt (ghi vào last_er
     u16 packet_index  0 .. packet_count-1
     u16 packet_count
     u16 reserved = 0
-    u32 frame_number  tăng dần từ 0 mỗi lần start/restart vẫn tiếp tục đếm (không reset)
+    u32 frame_number  tăng dần, dùng chung cho mọi VideoStreamer trong tiến trình (không reset khi
+                      start/restart): điện thoại bị chuyển sang luồng khác vẫn thấy số tăng
     u32 capture_time_us  32 bit thấp của time.perf_counter_ns()//1000 lúc nhận khung từ ffmpeg
     ... dữ liệu Annex-B của khung (bắt đầu bằng AUD 00 00 00 01 09 ...)
 """
 import atexit
 import collections
 import ctypes
+import itertools
 import os
 import struct
 import subprocess
@@ -358,6 +360,9 @@ def packetize(au, frame_number, capture_us, idr):
 # VideoStreamer
 # ---------------------------------------------------------------------------
 
+_FRAMES = itertools.count()  # next() trên itertools.count an toàn giữa các thread (GIL)
+
+
 class VideoStreamer:
     """Chạy ffmpeg chụp màn hình + nén H.264, cắt gói và gọi send_fn(bytes, addr) cho từng gói."""
 
@@ -578,8 +583,8 @@ class VideoStreamer:
             pass
 
     def _send_frame(self, au, idr, capture_us):
-        n = self.frame_number
-        self.frame_number += 1
+        n = next(_FRAMES) & 0xFFFFFFFF
+        self.frame_number = n + 1
         addr = self.addr
         for pkt in packetize(au, n, capture_us, idr):
             try:

@@ -1,8 +1,11 @@
 """Trạng thái một điện thoại đang kết nối (dùng chung cho WebSocket và UDP)."""
+import ctypes
+
 import winput
 
 try:
     import vgamepad as vg
+    from vgamepad.win import vigem_client as vcli
     PAD_LIB = True
     PAD_BUTTONS = {
         "A": vg.XUSB_BUTTON.XUSB_GAMEPAD_A, "B": vg.XUSB_BUTTON.XUSB_GAMEPAD_B,
@@ -16,6 +19,7 @@ try:
     }
 except Exception:  # vgamepad chưa cài hoặc thiếu driver ViGEmBus
     vg = None
+    vcli = None
     PAD_LIB = False
     PAD_BUTTONS = {}
 
@@ -39,6 +43,18 @@ class Session:
                 except Exception as e:
                     self.pad_error = "Không tạo được tay cầm ảo: %s" % e
         return self.pad
+
+    def player(self):
+        """Số người chơi XInput (1-4) Windows gán cho tay cầm ảo này = số game dùng (P1..P4).
+        None nếu chưa tạo tay cầm hoặc Windows hết chỗ (XInput chỉ có 4 tay cầm)."""
+        if self.pad is None or vcli is None:
+            return None
+        idx = ctypes.c_ulong()
+        try:
+            err = vcli.vigem_target_x360_get_user_index(self.pad._busp, self.pad._devicep, ctypes.byref(idx))
+        except Exception:
+            return None
+        return idx.value + 1 if err == 0x20000000 and idx.value < 4 else None  # VIGEM_ERROR_NONE
 
     def press(self, act):
         n = self.held.get(act, 0)

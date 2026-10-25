@@ -21,12 +21,14 @@ import keeper
 import paths
 import server
 import updater
+import video_control
 import winlist
 from session import PAD_LIB
 from version import VERSION
 
 VIGEM_URL = "https://github.com/nefarius/ViGEmBus/releases/latest"
 GREEN, RED, GREY = "#1a7f37", "#c62828", "#666"
+SAME_AS_DEFAULT = "Như ô Phát lên điện thoại"
 
 
 class _LogWriter:
@@ -77,9 +79,16 @@ class StatusWindow:
         ips.configure(state="readonly")
         ips.grid(row=2, column=0, columnspan=2, padx=14, pady=(2, 8), sticky="we")
 
-        tk.Label(root, text="Điện thoại:", font=("Segoe UI", 10, "bold")).grid(row=3, column=0, **pad)
-        self.phones = tk.Label(root, font=("Segoe UI", 10), justify="left")
-        self.phones.grid(row=3, column=1, sticky="w")
+        # mỗi điện thoại một dòng: số tay cầm (người chơi 1-4), có đang xem hình không, nguồn hình riêng
+        tk.Label(root, text="Điện thoại:", font=("Segoe UI", 10, "bold")).grid(
+            row=3, column=0, padx=14, sticky="nw")
+        self.phone_box = tk.Frame(root)
+        self.phone_box.grid(row=3, column=1, sticky="w", padx=(0, 14))
+        self.phone_empty = tk.Label(self.phone_box, text="chưa có điện thoại nào", fg=GREY, font=("Segoe UI", 10))
+        self.phone_empty.pack(anchor="w")
+        self.phone_rows = {}     # addr -> (khung, nhãn, ô chọn nguồn)
+        self.phone_order = ()
+        self.cb_items = {}       # ô chọn nguồn -> các cửa sổ đang liệt kê trong ô đó
 
         tk.Label(root, text="Tay cầm Xbox ảo:", font=("Segoe UI", 10, "bold")).grid(row=4, column=0, **pad)
         pf = tk.Frame(root)
@@ -105,7 +114,6 @@ class StatusWindow:
         self.src = ttk.Combobox(sf, state="readonly", width=42, postcommand=self.refresh_windows)
         self.src.pack(side="left", fill="x", expand=True)
         self.src.bind("<<ComboboxSelected>>", self.on_source)
-        self.win_items = []  # song song với các mục sau "Toàn màn hình": (hwnd, title, exe)
         # bấm "–" trên cửa sổ đó: giấu đi nhưng vẫn chạy (cửa sổ thu nhỏ thật thì không có hình) - keeper.py
         self.keep_var = tk.BooleanVar(value=self._setting("keep_minimized", True))
         ttk.Checkbutton(root, variable=self.keep_var, command=self.on_keep,
@@ -183,40 +191,105 @@ class StatusWindow:
         except queue.Empty:
             pass
 
-        names = server.phones(self.srv.app)
-        self.phones.configure(text="\n".join(names) if names else "chưa có điện thoại nào",
-                              fg="black" if names else GREY)
         vc = self.srv.app["video"]
-        kind = "window" if vc is not None and vc.target else "screen"
-        if vc is not None and vc.ffmpeg_ok(kind):
+        self.update_phones(vc)
+        kind = self.ffmpeg_kind(vc)
+        if vc is not None and kind is None:
             self.ff_btn.pack_forget()
-            ip, pipe = vc.watching
-            if ip:
+            watching = vc.watching
+            if len(watching) == 1:
+                ip, pipe = watching[0]
                 self.video_lbl.configure(text="đang phát tới %s (%s)" % (ip, pipe or "đang mở..."), fg=GREEN)
+            elif watching:
+                self.video_lbl.configure(text="đang phát tới %d điện thoại" % len(watching), fg=GREEN)
             else:
                 self.video_lbl.configure(text="sẵn sàng (bấm 📺 trong app)", fg=GREEN)
         else:
+            kind = kind or "screen"
             self.video_lbl.configure(text="cần ffmpeg " if not self.downloading else "đang tải ffmpeg... ",
                                      fg=RED if not self.downloading else GREY)
             if not self.downloading:
                 self.ff_btn.configure(text="Tải ffmpeg (~%d MB)" % ffmpeg_fetch.size_mb(kind))
                 self.ff_btn.pack(side="left")
+        if vc is not None:
+            keep = set()
+            for t in vc.window_targets():
+                vc.resolve(t)  # cập nhật trạng thái cửa sổ (tìm lại nếu game vừa mở lại)
+                if t.get("state") in ("ok", "minimized"):
+                    keep.add(t["hwnd"])
+            self.keeper.targets = frozenset(keep)
+        note, color = "", GREY
         if vc is not None and vc.target:
-            vc.window_target()  # cập nhật trạng thái cửa sổ (tìm lại nếu game vừa mở lại)
-            self.keeper.target = vc.target["hwnd"] if vc.target_state in ("ok", "minimized") else None
+            state = vc.target.get("state", "")
             note = {
                 "ok": "Chỉ cửa sổ này, kể cả khi bị che hay đang dùng app khác.",
                 "minimized": "Cửa sổ đang thu nhỏ: điện thoại giữ hình cuối, mở cửa sổ lên là chạy tiếp.",
                 "closed": "Cửa sổ đã đóng: chờ app mở lại (tự nhận ra).",
-            }.get(vc.target_state, "")
-            if self.keeper.hidden:
-                note = ("Đang giấu cửa sổ (đã bấm –): game vẫn chạy cho điện thoại. Bấm nút của nó trên "
-                        "thanh tác vụ để hiện lại.")
-            self.src_lbl.configure(text=note, fg=RED if vc.target_state == "closed" else GREY)
-        else:
-            self.keeper.target = None
-            self.src_lbl.configure(text="")
+            }.get(state, "")
+            color = RED if state == "closed" else GREY
+        hidden = self.keeper.hidden
+        if hidden:
+            note = ("Đang giấu %s (đã bấm –): game vẫn chạy cho điện thoại. Bấm nút của nó trên "
+                    "thanh tác vụ để hiện lại." % ("cửa sổ" if len(hidden) == 1 else "%d cửa sổ" % len(hidden)))
+            color = GREY
+        self.src_lbl.configure(text=note, fg=color)
         self.root.after(300, self.tick)
+
+    def ffmpeg_kind(self, vc):
+        """Bản ffmpeg còn thiếu cho các nguồn đang chọn ("screen"/"window"), None nếu đủ."""
+        if vc is None:
+            return "screen"
+        ips = [addr[0] for addr in self.phone_rows] or [None]
+        kinds = {"window" if (vc.source_for(ip) if ip else vc.target) else "screen" for ip in ips}
+        for k in ("window", "screen"):
+            if k in kinds and not vc.ffmpeg_ok(k):
+                return k
+        return None
+
+    # --- danh sách điện thoại ---
+
+    def update_phones(self, vc):
+        udp = self.srv.app["udp"]
+        try:
+            peers = list(udp.peers.values()) if udp is not None else []
+        except RuntimeError:  # dict đổi kích thước giữa chừng (thread máy chủ)
+            return
+        peers.sort(key=lambda p: (p.player or 9, p.addr))
+        alive = {p.addr for p in peers}
+        for addr in list(self.phone_rows):
+            if addr not in alive:
+                f, _, cb = self.phone_rows.pop(addr)
+                self.cb_items.pop(str(cb), None)
+                f.destroy()
+        for p in peers:
+            row = self.phone_rows.get(p.addr)
+            if row is None:
+                f = tk.Frame(self.phone_box)
+                lbl = tk.Label(f, font=("Segoe UI", 10), width=24, anchor="w")
+                lbl.pack(side="left")
+                cb = ttk.Combobox(f, state="readonly", width=28)
+                cb.configure(postcommand=lambda c=cb: self.fill_sources(c, per_phone=True))
+                cb.bind("<<ComboboxSelected>>", lambda _e, ip=p.addr[0], c=cb: self.on_phone_source(ip, c))
+                cb.pack(side="left", pady=1)
+                cb.set(self.phone_source_label(vc, p.addr[0]))
+                row = self.phone_rows[p.addr] = (f, lbl, cb)
+            text = p.addr[0]
+            if p.player:
+                text += " · tay cầm %d" % p.player
+            if vc is not None and vc.viewer(p.addr) is not None:
+                text += " · 📺"
+            row[1].configure(text=text)
+        order = tuple(p.addr for p in peers)
+        if order != self.phone_order:  # xếp lại theo số tay cầm
+            self.phone_order = order
+            for addr in order:
+                self.phone_rows[addr][0].pack_forget()
+            for addr in order:
+                self.phone_rows[addr][0].pack(anchor="w")
+            if order:
+                self.phone_empty.pack_forget()
+            else:
+                self.phone_empty.pack(anchor="w")
 
     # --- chọn nguồn hình ---
 
@@ -225,38 +298,91 @@ class StatusWindow:
         return "%s  —  %s" % (t, exe) if exe else t
 
     def refresh_windows(self):
-        self.win_items = winlist.list_windows()
-        self.src.configure(values=["Toàn màn hình"] + [self._label(t, e) for _, t, e in self.win_items])
+        self.fill_sources(self.src)
+
+    def fill_sources(self, cb, per_phone=False):
+        items = winlist.list_windows()
+        self.cb_items[str(cb)] = items
+        head = [SAME_AS_DEFAULT, "Toàn màn hình"] if per_phone else ["Toàn màn hình"]
+        cb.configure(values=head + [self._label(t, e) for _, t, e in items])
+
+    def _picked(self, cb, skip):
+        """Cửa sổ đã chọn trong ô cb ({"hwnd","title","exe"}); None nếu chọn một trong `skip` mục đầu."""
+        i = cb.current() - skip
+        items = self.cb_items.get(str(cb), [])
+        if i < 0 or i >= len(items):
+            return None
+        hwnd, title, exe = items[i]
+        return {"hwnd": hwnd, "title": title, "exe": exe}
 
     def on_source(self, _event=None):
-        i = self.src.current()
         vc = self.srv.app["video"]
-        if i <= 0 or i > len(self.win_items):
-            target = None
+        target = self._picked(self.src, 1)
+        if target is None:
             print("Phát: toàn màn hình")
         else:
-            hwnd, title, exe = self.win_items[i - 1]
-            target = {"hwnd": hwnd, "title": title, "exe": exe}
-            print('Phát: chỉ cửa sổ "%s" (%s)' % (title, exe))
+            print('Phát: chỉ cửa sổ "%s" (%s)' % (target["title"], target["exe"]))
         if vc is not None:
-            vc.target = target  # lần 'W' kế tiếp của điện thoại sẽ khởi động lại ffmpeg theo nguồn mới
+            vc.target = target  # lần 'W' kế tiếp của điện thoại sẽ chuyển sang luồng theo nguồn mới
         self.save_source(target)
 
-    def load_source(self):
-        """Lần trước chọn cửa sổ nào thì tìm lại theo tên tiến trình (hwnd đổi mỗi lần mở app)."""
-        try:
-            saved = json.loads(paths.SETTINGS.read_text(encoding="utf-8")).get("window")
-        except (OSError, ValueError):
-            saved = None
+    def on_phone_source(self, ip, cb):
+        """Điện thoại ip xem nguồn riêng (vd. Nucleus Co-op: mỗi người một cửa sổ game)."""
         vc = self.srv.app["video"]
+        if vc is None:
+            return
+        i = cb.current()
+        t = self._picked(cb, 2)
+        if i <= 0:
+            vc.sources.pop(ip, None)
+            print("Điện thoại %s: phát như ô Phát lên điện thoại" % ip)
+        elif i == 1:
+            vc.sources[ip] = video_control.SCREEN
+            print("Điện thoại %s: phát toàn màn hình" % ip)
+        elif t is None:
+            return
+        else:
+            vc.sources[ip] = t
+            print('Điện thoại %s: chỉ cửa sổ "%s" (%s)' % (ip, t["title"], t["exe"]))
+        self._save_setting("phone_sources", {
+            k: v if v == video_control.SCREEN else {"exe": v["exe"], "title": v["title"]}
+            for k, v in vc.sources.items()})
+
+    def phone_source_label(self, vc, ip):
+        s = vc.sources.get(ip) if vc is not None else None
+        if s is None:
+            return SAME_AS_DEFAULT
+        if s == video_control.SCREEN:
+            return "Toàn màn hình"
+        return self._label(s["title"], s["exe"])
+
+    def load_source(self):
+        """Lần trước chọn cửa sổ nào thì tìm lại theo tên tiến trình (hwnd đổi mỗi lần mở app).
+        Nhiều người chơi chọn nhiều cửa sổ của cùng một game: mỗi người một cửa sổ khác nhau."""
+        vc = self.srv.app["video"]
+        saved = self._setting("window")
+        used = set()
+
+        def find(saved):
+            found = winlist.find(saved.get("exe", ""), saved.get("title", ""), exclude=used)
+            if found:
+                used.add(found[0])
+            hwnd, title = (found[0], found[1]) if found else (0, saved.get("title", ""))
+            return {"hwnd": hwnd, "title": title, "exe": saved.get("exe", "")}, found
+
         if not saved or vc is None:
             self.src.set("Toàn màn hình")
+        else:
+            vc.target, found = find(saved)
+            self.src.set(self._label(vc.target["title"], vc.target["exe"]))
+            print('Phát: chỉ cửa sổ "%s"%s' % (vc.target["title"], "" if found else " (chưa mở)"))
+        if vc is None:
             return
-        found = winlist.find(saved.get("exe", ""), saved.get("title", ""))
-        hwnd, title = (found[0], found[1]) if found else (0, saved.get("title", ""))
-        vc.target = {"hwnd": hwnd, "title": title, "exe": saved.get("exe", "")}
-        self.src.set(self._label(title, saved.get("exe", "")))
-        print('Phát: chỉ cửa sổ "%s"%s' % (title, "" if found else " (chưa mở)"))
+        for ip, s in (self._setting("phone_sources") or {}).items():
+            if s == video_control.SCREEN:
+                vc.sources[ip] = s
+            elif isinstance(s, dict):
+                vc.sources[ip] = find(s)[0]
 
     def save_source(self, target):
         self._save_setting("window", {"exe": target["exe"], "title": target["title"]} if target else None)
@@ -290,8 +416,7 @@ class StatusWindow:
         self.downloading = True
         self.ff_btn.pack_forget()
         self.ff_bar.grid(row=9, column=1, sticky="w", pady=(2, 0))
-        vc = self.srv.app["video"]
-        kind = "window" if vc is not None and vc.target else "screen"
+        kind = self.ffmpeg_kind(self.srv.app["video"]) or "screen"
         version, url = ffmpeg_fetch.KINDS[kind][:2]
         print("Đang tải ffmpeg %s từ %s" % (version, url))
 

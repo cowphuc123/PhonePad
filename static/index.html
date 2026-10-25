@@ -525,9 +525,10 @@ function renderProfilePanel(){
   panel.append(h('p', {className: 'hint', textContent: 'Chạm một nút để chỉnh phím, kéo để di chuyển. Dùng các nút “+” ở trên để thêm.'}));
   panel.append(...field('Tên hồ sơ', h('input', {type:'text', value: p.name, maxLength: 30,
     oninput: e => { p.name = e.target.value || 'Không tên'; save(); $('#prof').selectedOptions[0].textContent = p.name; }})));
-  // Vùng màn hình máy tính mà app Android hiển thị khi dùng hồ sơ này (game chia đôi màn hình)
+  // Vùng màn hình máy tính mà app Android hiển thị khi dùng hồ sơ này (game chia đôi / chia 4 màn hình)
   const vm = h('select', {onchange: () => { p.video = {mode: vm.value}; save(); }});
-  [['full','Toàn màn hình'],['left','Nửa trái'],['right','Nửa phải'],['top','Nửa trên'],['bottom','Nửa dưới']]
+  [['full','Toàn màn hình'],['left','Nửa trái'],['right','Nửa phải'],['top','Nửa trên'],['bottom','Nửa dưới'],
+   ['tl','1/4 góc trên trái'],['tr','1/4 góc trên phải'],['bl','1/4 góc dưới trái'],['br','1/4 góc dưới phải']]
     .forEach(([v, t]) => vm.add(new Option(t, v)));
   vm.value = (p.video && p.video.mode) || 'full';
   panel.append(...field('Hình máy tính trên app Android', vm));

@@ -105,11 +105,12 @@ def client_rect(hwnd):
     return p.x, p.y, r.right - r.left, r.bottom - r.top
 
 
-def find(process, title_hint=""):
-    """Tìm lại cửa sổ đã chọn lần trước theo tên tiến trình (tiêu đề hay đổi, vd. tên map)."""
+def find(process, title_hint="", exclude=()):
+    """Tìm lại cửa sổ đã chọn lần trước theo tên tiến trình (tiêu đề hay đổi, vd. tên map).
+    exclude: hwnd đã có người chơi khác dùng (Nucleus Co-op mở nhiều cửa sổ cùng một game)."""
     best = None
     for hwnd, t, p in list_windows():
-        if p.lower() != process.lower():
+        if p.lower() != process.lower() or hwnd in exclude:
             continue
         if t == title_hint:
             return hwnd, t, p

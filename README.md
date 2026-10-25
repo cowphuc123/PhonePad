@@ -54,7 +54,21 @@ nên điện thoại nào kết nối cũng dùng được.
 
 Cần driver **ViGEmBus**. Nếu cửa sổ PhonePad báo *chưa có driver ViGEmBus*, bấm **Cài driver**
 (bộ cài đi kèm exe, Windows sẽ hỏi quyền Administrator), cài xong tắt và mở lại PhonePad.
-Mỗi điện thoại kết nối = 1 tay cầm riêng → chơi được nhiều người.
+
+## Chơi 4 người
+
+- Mỗi điện thoại (hồ sơ **Tay cầm Xbox**) = 1 tay cầm Xbox ảo riêng. Windows cho tối đa **4 tay cầm Xbox**
+  (kể cả tay cầm thật đang cắm), nên chơi được tới 4 điện thoại; ai bấm nút trước thì thành tay cầm trước.
+- Thanh trên app hiện **🎮1…🎮4** = bạn là tay cầm / người chơi số mấy (game dùng đúng số này).
+  Cửa sổ PhonePad cũng ghi *tay cầm N* cạnh IP từng điện thoại.
+- Cả 4 điện thoại bật **📺** cùng lúc được. Mỗi điện thoại một hình khác nhau:
+  - **Game chia 4 màn hình:** trong **✎ Sửa → ⚙ Hồ sơ → Hình máy tính** chọn *1/4 góc trên trái / trên phải /
+    dưới trái / dưới phải* (mỗi người một hồ sơ, hoặc mỗi điện thoại chọn hồ sơ của mình).
+  - **Nucleus Co-op (mỗi người một cửa sổ game):** trên cửa sổ PhonePad, ô cạnh mỗi điện thoại chọn cửa sổ
+    game của người đó. Để *Như ô Phát lên điện thoại* thì điện thoại đó xem nguồn chung bên dưới.
+    Bấm – trên các cửa sổ đó cũng được giấu đi mà vẫn chạy như bình thường.
+- Các điện thoại xem cùng một hình thì dùng chung một luồng (máy tính chỉ nén một lần); tối đa 4 hình khác
+  nhau cùng lúc. Mỗi hình ~10 Mbps (720p) / 18 Mbps (1080p) trên Wi‑Fi: 4 người nên dùng Wi‑Fi 5 GHz và 720p.
 
 ## Xem hình máy tính trên điện thoại
 
